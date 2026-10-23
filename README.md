@@ -140,12 +140,44 @@ sudo pacman -S --needed python python-gobject gtk3 libayatana-appindicator sudo 
 ## Weitere Optionen von install.sh
 
 ```bash
-./install.sh --autostart   # beim Anmelden im Tray starten
-./install.sh --uninstall   # Menüeintrag, Icon und Autostart entfernen
+./install.sh --autostart               # beim Anmelden im Tray starten
+./install.sh --system-service          # Verbinden ohne Passwort (siehe unten)
+./install.sh --remove-system-service   # wieder zurück zur sudo-Abfrage
+./install.sh --uninstall               # Menüeintrag, Icon und Autostart entfernen
 ```
 
 Das Repo bleibt an seinem Ort; Menüeintrag und Autostart zeigen auf `bin/pangolin-gui` im
 geklonten Ordner. Nach `git pull` ist die neue Version sofort aktiv.
+
+### Verbinden ohne Passwort (Systemdienst)
+
+Den Tunnel kann nur root einrichten. Ohne weitere Einrichtung fragt die CLI deshalb bei jedem
+Verbinden per `sudo` nach dem Passwort. `./install.sh --system-service` richtet stattdessen
+einmalig (mit `sudo`) Folgendes ein:
+
+| Datei | Zweck |
+|---|---|
+| `/usr/local/bin/pangolin` | Pangolin-CLI, root-gehörend (wird aus `~/.local/bin` verschoben; ein Paket in `/usr/bin` wird direkt genutzt) |
+| `/usr/local/lib/pangolin-gui/pangolin-gui-client` | Startprogramm des Dienstes (Kopie von `system/pangolin-gui-client`) |
+| `/etc/systemd/system/pangolin-gui@.service` | systemd-Dienst `pangolin-gui@<user>.service`, nicht beim Booten aktiv |
+| `/etc/polkit-1/rules.d/50-pangolin-gui.rules` | erlaubt dem angemeldeten Benutzer, **nur seinen eigenen** Dienst ohne Passwort zu starten, stoppen und neu zu starten |
+
+Danach startet *Verbinden* den Dienst per `systemctl`, *Trennen* stoppt ihn. Fehlt die
+Polkit-Freigabe, fällt die GUI auf die sudo-Abfrage zurück. Beim Herunterfahren stoppt systemd
+den Dienst sauber, DNS und Routen werden zurückgesetzt.
+
+Sicherheit: Das Startprogramm läuft als root und liest nur das aktive Konto
+(`accounts.json`) und die `up.*`-Einstellungen (`config.json`) aus `~/.config/pangolin/`,
+und nur aus regulären Dateien des Benutzers (keine Symlinks). Es prüft jeden Wert und startet
+ausschließlich `pangolin up client`, ohne Shell; das Client-Secret geht über die Umgebung statt
+über die Befehlszeile. Ein Programm, das unter dem eigenen Benutzer läuft, kann damit ohne
+Passwort den Tunnel ein- und ausschalten und über die eigenen Konto-Dateien das Ziel des Tunnels
+ändern, aber keine anderen Befehle als root ausführen. Ein `sudoers`-Eintrag ohne Passwort ist
+dagegen **nicht** zu empfehlen: Die CLI ruft `sudo sh -c "…"` auf, eine solche Freigabe würde
+beliebige Befehle als root erlauben.
+
+Nach einem Update der GUI, das `system/` ändert, `./install.sh --system-service` erneut
+ausführen; nach `pangolin update` ebenso, falls die CLI dabei wieder in `~/.local/bin` landet.
 
 ## Starten
 
@@ -264,16 +296,16 @@ festhalten.
 | Aufgabe | Umsetzung |
 |---|---|
 | Status | HTTP über den Unix-Socket `/var/run/olm.sock` (`GET /status`), alle 2 s abgefragt |
-| Verbinden | `pangolin up client --silent`. Die CLI startet den Tunnel-Dienst per `sudo`; ohne Terminal fragt `sudo` über `bin/pangolin-gui-askpass` (GTK-Passwortdialog) |
-| Trennen | `pangolin down client` |
+| Verbinden | Mit Systemdienst: `systemctl start pangolin-gui@<user>.service` (ohne Passwort, siehe oben). Sonst `pangolin up client --silent`: Die CLI startet den Tunnel-Dienst per `sudo`; ohne Terminal fragt `sudo` über `bin/pangolin-gui-askpass` (GTK-Passwortdialog) |
+| Trennen | Mit Systemdienst: `systemctl stop …`, sonst `pangolin down client` |
 | Konten | `~/.config/pangolin/accounts.json` (nur lesend) |
 | Organisationen | REST-API `GET /api/v1/user/{id}/orgs` mit der Session der CLI |
 | Anmeldung | `pangolin auth login <host>` in einem Pseudo-Terminal; die GUI zeigt den Code an |
 | Einstellungen | `pangolin config set up.* …`, GUI-eigene Werte in `~/.config/pangolin-gui/` |
 
 Das Passwort aus dem Dialog geht nur an `sudo` und wird weder gespeichert noch geloggt.
-Wer ohne Passwortabfrage verbinden will, kann `pangolin` in `sudoers` freigeben; das ist aber
-eine bewusste Sicherheitsentscheidung.
+Wer ohne Passwortabfrage verbinden will, nutzt den Systemdienst (`./install.sh --system-service`),
+keinen `sudoers`-Eintrag.
 
 Details zum Aufbau stehen in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
@@ -286,6 +318,7 @@ pangolin_gui/
   app.py                    Gtk.Application und Controller
   state.py                  Polling, Zustand für die UI
   cli.py                    Aufrufe der Pangolin-CLI, Login im Pseudo-Terminal
+  service.py                Systemdienst-Modus: systemctl start/stop
   olm_socket.py             Client für den Tunnel-Dienst (Unix-Socket)
   api.py                    REST-API (Organisationen)
   accounts.py               Konten und Konfiguration der CLI lesen
@@ -297,6 +330,7 @@ pangolin_gui/
   locales/de.json           Deutsche Texte
   clipboard.py, netinfo.py  Zwischenablage, eigene Tunnel-IP
   windows/                  Status, Logs, Einstellungen, Login
+system/                     Systemdienst: Startprogramm (läuft als root), systemd-Unit, Polkit-Regel
 tools/i18n_check.py         Texte sammeln, Sprachdateien prüfen
 tests/                      pytest
 deps/arch.txt               Paketliste Arch

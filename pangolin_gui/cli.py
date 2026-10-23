@@ -17,6 +17,7 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from pangolin_gui import service
 from pangolin_gui.i18n import _
 
 log = logging.getLogger(__name__)
@@ -150,9 +151,21 @@ def version() -> str:
 def up(org_id: str | None = None, askpass: str | None = None) -> None:
     """Start client connection silently.
 
-    Blocks until sudo authorization and daemon launch complete.
-    Runs with no controlling terminal and SUDO_ASKPASS if provided.
+    With the system service installed (`install.sh --system-service`) this starts
+    pangolin-gui@<user>.service, which polkit allows without a password; the service
+    reads the active account and organization itself. Otherwise the CLI elevates with
+    sudo: this blocks until sudo authorization and daemon launch complete, with no
+    controlling terminal and SUDO_ASKPASS if provided.
     """
+    if service.installed():
+        try:
+            service.start()
+            return
+        except service.ServiceError as exc:
+            if not exc.denied:
+                raise CliError(str(exc)) from exc
+            log.warning("system service not permitted (%s), falling back to sudo", exc)
+
     args = ["up", "client", "--silent"]
     log.info("connecting (org=%s, askpass=%s)", org_id or "default", bool(askpass))
     if org_id:
@@ -172,7 +185,16 @@ def up(org_id: str | None = None, askpass: str | None = None) -> None:
 
 
 def down() -> None:
-    """Stop the running client connection."""
+    """Stop the running client connection (the system service, if that runs it)."""
+    if service.installed() and service.is_active():
+        try:
+            service.stop()
+            return
+        except service.ServiceError as exc:
+            if not exc.denied:
+                raise CliError(str(exc)) from exc
+            # `pangolin down` ends the client cleanly, so the unit stops as well.
+            log.warning("system service not permitted (%s), using pangolin down", exc)
     _run_cli(["down", "client"], timeout=30.0)
 
 

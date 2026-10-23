@@ -112,6 +112,7 @@
     "Status: {status}": "Status: {status}",
     "System default": "Systemstandard",
     "The Pangolin CLI is not installed. See More → Install Pangolin CLI…": "Die Pangolin-CLI ist nicht installiert. Siehe Mehr → Pangolin-CLI installieren…",
+    "The tunnel service stopped right after starting. Details: journalctl -u {unit}": "Der Tunnel-Dienst hat sich direkt nach dem Start beendet. Details: journalctl -u {unit}",
     "Upstream DNS servers": "Upstream-DNS-Server",
     "Version": "Version",
     "Version unknown": "Version unbekannt",

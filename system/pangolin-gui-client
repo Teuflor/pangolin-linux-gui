@@ -1,0 +1,171 @@
+#!/usr/bin/python3 -I
+"""Start the Pangolin tunnel for one user as root (ExecStart of pangolin-gui@.service).
+
+    pangolin-gui-client <username>
+
+Installed root-owned to /usr/local/lib/pangolin-gui/ by `install.sh --system-service`.
+Polkit lets the user start and stop their own pangolin-gui@<user>.service without a
+password, so everything read from the user's files is treated as untrusted:
+
+- only the active account and the `up.*` settings are read from ~/.config/pangolin/,
+  from regular files owned by that user (no symlinks);
+- every value is validated, and only `pangolin up client` is executed, without a shell;
+- the client secret is passed in the environment, not on the command line.
+
+This file must stay self-contained: it must not import anything from the user-writable
+checkout of the GUI.
+"""
+from __future__ import annotations
+
+import json
+import os
+import pwd
+import re
+import stat
+import sys
+
+PANGOLIN = "/usr/local/bin/pangolin"
+MAX_FILE_SIZE = 1024 * 1024
+
+USERNAME_RE = re.compile(r"^[a-z_][a-z0-9_-]{0,31}$")
+ID_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9._-]{0,127}$")
+ENDPOINT_RE = re.compile(r"^https?://[A-Za-z0-9.-]+(:[0-9]{1,5})?(/[A-Za-z0-9._~/-]*)?$")
+DNS_SERVER_RE = re.compile(r"^[0-9A-Fa-f:.\[\]]{2,64}$")
+DOMAIN_RE = re.compile(r"^[A-Za-z0-9*._-]{1,253}$")
+LOG_LEVELS = {"debug", "info", "warn", "warning", "error"}
+
+BOOL_FLAGS = {
+    "override_dns": "--override-dns",
+    "tunnel_dns": "--tunnel-dns",
+    "prefer_local_routes": "--prefer-local-routes",
+    "exit_node_takes_precedence": "--exit-node-takes-precedence",
+}
+LIST_FLAGS = {
+    "upstream_dns": ("--upstream-dns", DNS_SERVER_RE),
+    "match_domains_dns": ("--match-domains", DOMAIN_RE),
+}
+
+
+class ConfigError(Exception):
+    pass
+
+
+def read_user_json(path: str, uid: int) -> dict:
+    """Read a JSON object from a regular file owned by uid, refusing symlinks."""
+    try:
+        fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW | os.O_CLOEXEC)
+    except FileNotFoundError:
+        return {}
+    except OSError as exc:
+        raise ConfigError(f"cannot open {path}: {exc.strerror}") from None
+    with os.fdopen(fd, "rb") as fh:
+        st = os.fstat(fh.fileno())
+        if not stat.S_ISREG(st.st_mode) or st.st_uid != uid:
+            raise ConfigError(f"{path} must be a regular file owned by the user")
+        if st.st_size > MAX_FILE_SIZE:
+            raise ConfigError(f"{path} is too large")
+        try:
+            data = json.loads(fh.read(MAX_FILE_SIZE + 1))
+        except ValueError:
+            raise ConfigError(f"{path} is not valid JSON") from None
+    if not isinstance(data, dict):
+        raise ConfigError(f"{path} does not contain a JSON object")
+    return data
+
+
+def _checked(value, pattern: re.Pattern, what: str) -> str:
+    if not isinstance(value, str) or not pattern.match(value):
+        raise ConfigError(f"invalid {what}")
+    return value
+
+
+def build_command(accounts: dict, config: dict) -> tuple[list[str], str]:
+    """Return (argv, secret) for `pangolin up client` from the user's CLI files."""
+    active_id = accounts.get("activeuserid") or accounts.get("activeUserId")
+    account = (accounts.get("accounts") or {}).get(active_id) if active_id else None
+    if not isinstance(account, dict):
+        raise ConfigError("no active Pangolin account; log in with the GUI first")
+
+    creds = account.get("olmCredentials") or {}
+    if not isinstance(creds, dict):
+        raise ConfigError("invalid client credentials")
+    client_id = _checked(creds.get("id"), ID_RE, "client id")
+    secret = _checked(creds.get("secret"), ID_RE, "client secret")
+    endpoint = _checked(account.get("host"), ENDPOINT_RE, "server URL")
+
+    # Always --flag=value, so no value can ever be parsed as an option of its own.
+    argv = [PANGOLIN, "up", "client", f"--id={client_id}", f"--endpoint={endpoint}"]
+    org = account.get("orgId")
+    if org:
+        argv.append(f"--org={_checked(org, ID_RE, 'organization id')}")
+
+    up = config.get("up") or {}
+    if not isinstance(up, dict):
+        raise ConfigError("invalid 'up' settings")
+    # Pass every set value explicitly: the CLI itself drops e.g. override_dns=false.
+    for key, flag in BOOL_FLAGS.items():
+        if key in up:
+            if not isinstance(up[key], bool):
+                raise ConfigError(f"invalid setting up.{key}")
+            argv.append(f"{flag}={'true' if up[key] else 'false'}")
+    for key, (flag, pattern) in LIST_FLAGS.items():
+        values = up.get(key) or []
+        if not isinstance(values, list):
+            raise ConfigError(f"invalid setting up.{key}")
+        if values:
+            argv.append(f"{flag}={','.join(_checked(v, pattern, f'entry in up.{key}') for v in values)}")
+
+    level = config.get("log_level")
+    if level:
+        if level not in LOG_LEVELS:
+            raise ConfigError("invalid log_level")
+        argv.append(f"--log-level={level}")
+    return argv, secret
+
+
+def build_env(user: pwd.struct_passwd, secret: str) -> dict[str, str]:
+    """Minimal environment, like the CLI's own `sudo` child (logs go to the user's config dir)."""
+    return {
+        "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
+        "HOME": "/root",
+        "LANG": "C.UTF-8",
+        "PANGOLIN_SUBPROCESS": "1",
+        "PANGOLIN_CLIENT_SECRET": secret,
+        "SUDO_USER": user.pw_name,
+        "SUDO_UID": str(user.pw_uid),
+        "SUDO_GID": str(user.pw_gid),
+    }
+
+
+def main(argv: list[str]) -> int:
+    if len(argv) != 2 or not USERNAME_RE.match(argv[1]):
+        print("usage: pangolin-gui-client <username>", file=sys.stderr)
+        return 2
+    if os.geteuid() != 0:
+        print("pangolin-gui-client must run as root (via pangolin-gui@.service)", file=sys.stderr)
+        return 2
+    try:
+        user = pwd.getpwnam(argv[1])
+    except KeyError:
+        print(f"unknown user {argv[1]}", file=sys.stderr)
+        return 2
+    if user.pw_uid == 0:
+        print("refusing to run for root", file=sys.stderr)
+        return 2
+
+    base = os.path.join(user.pw_dir, ".config", "pangolin")
+    try:
+        accounts = read_user_json(os.path.join(base, "accounts.json"), user.pw_uid)
+        config = read_user_json(os.path.join(base, "config.json"), user.pw_uid)
+        cmd, secret = build_command(accounts, config)
+    except ConfigError as exc:
+        print(f"pangolin-gui-client: {exc}", file=sys.stderr)
+        return 1
+
+    print("starting: " + " ".join(cmd), file=sys.stderr, flush=True)
+    os.execve(PANGOLIN, cmd, build_env(user, secret))
+    return 1  # not reached
+
+
+if __name__ == "__main__":
+    sys.exit(main(sys.argv))

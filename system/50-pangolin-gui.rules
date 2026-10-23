@@ -1,0 +1,14 @@
+// Pangolin GUI: a user at the local, active session may start, stop and restart
+// their own tunnel unit pangolin-gui@<user>.service without a password.
+// Installed by `install.sh --system-service`.
+polkit.addRule(function(action, subject) {
+    if (action.id != "org.freedesktop.systemd1.manage-units" || !subject.local || !subject.active) {
+        return polkit.Result.NOT_HANDLED;
+    }
+    var verb = action.lookup("verb");
+    if (action.lookup("unit") == "pangolin-gui@" + subject.user + ".service" &&
+        (verb == "start" || verb == "stop" || verb == "restart")) {
+        return polkit.Result.YES;
+    }
+    return polkit.Result.NOT_HANDLED;
+});

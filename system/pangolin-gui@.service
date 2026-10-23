@@ -1,0 +1,19 @@
+# Pangolin tunnel for one user, started and stopped by the Pangolin GUI.
+# Installed by `install.sh --system-service`. Not enabled at boot: the GUI starts it
+# on "Connect" (polkit allows that without a password, see 50-pangolin-gui.rules).
+[Unit]
+Description=Pangolin tunnel for %i (Pangolin GUI)
+Documentation=https://github.com/Teuflor/pangolin-linux-gui
+After=network-online.target
+Wants=network-online.target
+StartLimitIntervalSec=60
+StartLimitBurst=3
+
+[Service]
+Type=simple
+ExecStart=/usr/local/lib/pangolin-gui/pangolin-gui-client %i
+# SIGTERM to the client only, so it can restore DNS and routes before anything is killed.
+KillMode=mixed
+TimeoutStopSec=15
+Restart=on-failure
+RestartSec=5
