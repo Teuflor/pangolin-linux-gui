@@ -35,15 +35,16 @@ Keine weiteren Python-Abhängigkeiten außer der Standardbibliothek. Tests mit p
   stdin=DEVNULL) mit `SUDO_ASKPASS=<repo>/bin/pangolin-gui-askpass`.
   Der root-Kindprozess ist `PANGOLIN_SUBPROCESS=1 pangolin up client --org … --id … --secret …
   --endpoint … [Flags]`; er findet das Config-/Log-Verzeichnis des Benutzers über `SUDO_USER`.
-  `--org/--id/--secret/--endpoint` lassen sich auch als `PANGOLIN_ORG`, `PANGOLIN_CLIENT_ID`,
-  `PANGOLIN_CLIENT_SECRET`, `PANGOLIN_ENDPOINT` setzen. Achtung: `up.override_dns=false` gibt
-  die CLI dabei nicht weiter (nur gesetzte `true`-Werte).
+  Beim normalen Aufruf lassen sich `--org/--id/--secret/--endpoint` auch als `PANGOLIN_ORG`,
+  `PANGOLIN_CLIENT_ID`, `PANGOLIN_CLIENT_SECRET`, `PANGOLIN_ENDPOINT` setzen; im Kindmodus
+  (`PANGOLIN_SUBPROCESS=1`) wird `PANGOLIN_CLIENT_SECRET` ignoriert (Server antwortet 401).
+  Achtung: `up.override_dns=false` gibt die CLI beim sudo-Weg nicht weiter (nur `true`-Werte).
 - Systemdienst-Modus (`install.sh --system-service`, `pangolin_gui/service.py`): Ist
   `pangolin-gui@.service` installiert, startet/stoppt `cli.up()`/`cli.down()` den Dienst per
   `systemctl --no-ask-password`; Polkit erlaubt das dem Benutzer für seine eigene Instanz. Das
   Startprogramm `system/pangolin-gui-client` (root, eigenständig, importiert nichts aus dem Repo)
   baut den Aufruf oben aus `accounts.json`/`config.json` nach, mit allen `up.*`-Werten explizit
-  und dem Secret in `PANGOLIN_CLIENT_SECRET`. Lehnt Polkit ab, fällt `up()` auf sudo zurück.
+  und `--secret=…` wie die CLI selbst. Lehnt Polkit ab, fällt `up()` auf sudo zurück.
 - `pangolin auth login <host>` gibt eine Zeile `First copy your one-time code: XXXX-XXXX` aus und
   pollt dann selbst bis zu 5 Minuten. Login-URL: `<host>/auth/login/device?code=<code>`.
   Ist schon ein Konto aktiv, fragt die CLI interaktiv (huh-TUI) „Log in again / different account“

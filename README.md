@@ -169,8 +169,9 @@ den Dienst sauber, DNS und Routen werden zurückgesetzt.
 Sicherheit: Das Startprogramm läuft als root und liest nur das aktive Konto
 (`accounts.json`) und die `up.*`-Einstellungen (`config.json`) aus `~/.config/pangolin/`,
 und nur aus regulären Dateien des Benutzers (keine Symlinks). Es prüft jeden Wert und startet
-ausschließlich `pangolin up client`, ohne Shell; das Client-Secret geht über die Umgebung statt
-über die Befehlszeile. Ein Programm, das unter dem eigenen Benutzer läuft, kann damit ohne
+ausschließlich `pangolin up client`, ohne Shell. Das Client-Secret steht wie beim sudo-Weg der
+CLI in der Befehlszeile (für lokale Benutzer in `ps` sichtbar); über die Umgebung nimmt die CLI
+es an dieser Stelle nicht an. Ein Programm, das unter dem eigenen Benutzer läuft, kann damit ohne
 Passwort den Tunnel ein- und ausschalten und über die eigenen Konto-Dateien das Ziel des Tunnels
 ändern, aber keine anderen Befehle als root ausführen. Ein `sudoers`-Eintrag ohne Passwort ist
 dagegen **nicht** zu empfehlen: Die CLI ruft `sudo sh -c "…"` auf, eine solche Freigabe würde

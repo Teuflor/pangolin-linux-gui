@@ -33,11 +33,9 @@ ACCOUNTS = {
 
 
 def test_build_command_from_active_account():
-    argv, secret = helper.build_command(ACCOUNTS, {})
-    assert argv == [helper.PANGOLIN, "up", "client", "--id=abc123",
+    argv = helper.build_command(ACCOUNTS, {})
+    assert argv == [helper.PANGOLIN, "up", "client", "--id=abc123", "--secret=s3cr3t",
                     "--endpoint=https://pangolin.example.com", "--org=my-org"]
-    assert secret == "s3cr3t"
-    assert "s3cr3t" not in " ".join(argv)
 
 
 def test_settings_are_passed_explicitly():
@@ -45,7 +43,7 @@ def test_settings_are_passed_explicitly():
         "override_dns": False, "prefer_local_routes": True,
         "upstream_dns": ["1.1.1.1:53", "9.9.9.9"], "match_domains_dns": ["*.corp.internal"],
     }}
-    argv, _ = helper.build_command(ACCOUNTS, config)
+    argv = helper.build_command(ACCOUNTS, config)
     assert "--override-dns=false" in argv
     assert "--prefer-local-routes=true" in argv
     assert "--upstream-dns=1.1.1.1:53,9.9.9.9" in argv
@@ -56,7 +54,7 @@ def test_settings_are_passed_explicitly():
 def test_camel_case_active_id_is_accepted():
     accounts = dict(ACCOUNTS)
     accounts["activeUserId"] = accounts.pop("activeuserid")
-    argv, _ = helper.build_command(accounts, {})
+    argv = helper.build_command(accounts, {})
     assert "--id=abc123" in argv
 
 
@@ -111,11 +109,11 @@ def test_read_user_json_rejects_symlink(tmp_path):
         helper.read_user_json(str(link), os.getuid())
 
 
-def test_env_carries_secret_and_user():
+def test_env_names_the_user():
     import pwd
     user = pwd.getpwuid(os.getuid())
-    env = helper.build_env(user, "s3cr3t")
-    assert env["PANGOLIN_CLIENT_SECRET"] == "s3cr3t"
+    env = helper.build_env(user)
+    assert "PANGOLIN_CLIENT_SECRET" not in env  # ignored by the CLI's child mode
     assert env["SUDO_USER"] == user.pw_name
     assert env["PANGOLIN_SUBPROCESS"] == "1"
     assert env["HOME"] == "/root"

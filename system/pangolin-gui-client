@@ -9,8 +9,10 @@ password, so everything read from the user's files is treated as untrusted:
 
 - only the active account and the `up.*` settings are read from ~/.config/pangolin/,
   from regular files owned by that user (no symlinks);
-- every value is validated, and only `pangolin up client` is executed, without a shell;
-- the client secret is passed in the environment, not on the command line.
+- every value is validated, and only `pangolin up client` is executed, without a shell.
+
+The client secret goes on the command line, like in the CLI's own `sudo` child: with
+PANGOLIN_SUBPROCESS=1 the CLI ignores PANGOLIN_CLIENT_SECRET and the server answers 401.
 
 This file must stay self-contained: it must not import anything from the user-writable
 checkout of the GUI.
@@ -79,8 +81,8 @@ def _checked(value, pattern: re.Pattern, what: str) -> str:
     return value
 
 
-def build_command(accounts: dict, config: dict) -> tuple[list[str], str]:
-    """Return (argv, secret) for `pangolin up client` from the user's CLI files."""
+def build_command(accounts: dict, config: dict) -> list[str]:
+    """Return argv for `pangolin up client` from the user's CLI files."""
     active_id = accounts.get("activeuserid") or accounts.get("activeUserId")
     account = (accounts.get("accounts") or {}).get(active_id) if active_id else None
     if not isinstance(account, dict):
@@ -94,7 +96,8 @@ def build_command(accounts: dict, config: dict) -> tuple[list[str], str]:
     endpoint = _checked(account.get("host"), ENDPOINT_RE, "server URL")
 
     # Always --flag=value, so no value can ever be parsed as an option of its own.
-    argv = [PANGOLIN, "up", "client", f"--id={client_id}", f"--endpoint={endpoint}"]
+    argv = [PANGOLIN, "up", "client", f"--id={client_id}", f"--secret={secret}",
+            f"--endpoint={endpoint}"]
     org = account.get("orgId")
     if org:
         argv.append(f"--org={_checked(org, ID_RE, 'organization id')}")
@@ -120,17 +123,16 @@ def build_command(accounts: dict, config: dict) -> tuple[list[str], str]:
         if level not in LOG_LEVELS:
             raise ConfigError("invalid log_level")
         argv.append(f"--log-level={level}")
-    return argv, secret
+    return argv
 
 
-def build_env(user: pwd.struct_passwd, secret: str) -> dict[str, str]:
+def build_env(user: pwd.struct_passwd) -> dict[str, str]:
     """Minimal environment, like the CLI's own `sudo` child (logs go to the user's config dir)."""
     return {
         "PATH": "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin",
         "HOME": "/root",
         "LANG": "C.UTF-8",
         "PANGOLIN_SUBPROCESS": "1",
-        "PANGOLIN_CLIENT_SECRET": secret,
         "SUDO_USER": user.pw_name,
         "SUDO_UID": str(user.pw_uid),
         "SUDO_GID": str(user.pw_gid),
@@ -157,13 +159,14 @@ def main(argv: list[str]) -> int:
     try:
         accounts = read_user_json(os.path.join(base, "accounts.json"), user.pw_uid)
         config = read_user_json(os.path.join(base, "config.json"), user.pw_uid)
-        cmd, secret = build_command(accounts, config)
+        cmd = build_command(accounts, config)
     except ConfigError as exc:
         print(f"pangolin-gui-client: {exc}", file=sys.stderr)
         return 1
 
-    print("starting: " + " ".join(cmd), file=sys.stderr, flush=True)
-    os.execve(PANGOLIN, cmd, build_env(user, secret))
+    shown = ["--secret=***" if a.startswith("--secret=") else a for a in cmd]
+    print("starting: " + " ".join(shown), file=sys.stderr, flush=True)
+    os.execve(PANGOLIN, cmd, build_env(user))
     return 1  # not reached
 
 
