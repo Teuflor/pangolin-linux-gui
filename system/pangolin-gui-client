@@ -11,8 +11,8 @@ password, so everything read from the user's files is treated as untrusted:
   from regular files owned by that user (no symlinks);
 - every value is validated, and only `pangolin up client` is executed, without a shell.
 
-The client secret goes on the command line, like in the CLI's own `sudo` child: with
-PANGOLIN_SUBPROCESS=1 the CLI ignores PANGOLIN_CLIENT_SECRET and the server answers 401.
+The command line and environment mirror the CLI's own `sudo` child, including the client
+secret as --secret.
 
 This file must stay self-contained: it must not import anything from the user-writable
 checkout of the GUI.
@@ -133,6 +133,9 @@ def build_env(user: pwd.struct_passwd) -> dict[str, str]:
         "HOME": "/root",
         "LANG": "C.UTF-8",
         "PANGOLIN_SUBPROCESS": "1",
+        # Like the CLI's own child for a logged-in account: also load the user's session
+        # (via SUDO_USER), which a user device needs; without it the server answers 401.
+        "PANGOLIN_CREDENTIALS_FROM_KEYRING": "1",
         "SUDO_USER": user.pw_name,
         "SUDO_UID": str(user.pw_uid),
         "SUDO_GID": str(user.pw_gid),

@@ -33,11 +33,12 @@ Keine weiteren Python-Abhängigkeiten außer der Standardbibliothek. Tests mit p
 - `pangolin up client` (detached) ruft intern `sudo sh -c ...` auf. Ohne Terminal nutzt sudo
   `SUDO_ASKPASS`. Die GUI startet `up` daher **ohne Controlling-TTY** (`start_new_session=True`,
   stdin=DEVNULL) mit `SUDO_ASKPASS=<repo>/bin/pangolin-gui-askpass`.
-  Der root-Kindprozess ist `PANGOLIN_SUBPROCESS=1 pangolin up client --org … --id … --secret …
-  --endpoint … [Flags]`; er findet das Config-/Log-Verzeichnis des Benutzers über `SUDO_USER`.
+  Der root-Kindprozess ist `PANGOLIN_SUBPROCESS=1 PANGOLIN_CREDENTIALS_FROM_KEYRING=1 pangolin
+  up client --org … --id … --secret … --endpoint … [Flags]`; er findet das Config-/Log-Verzeichnis
+  des Benutzers über `SUDO_USER`. Ohne `PANGOLIN_CREDENTIALS_FROM_KEYRING=1` lehnt der Server ein
+  Benutzergerät mit „401 WebSocket connection unauthorized“ ab.
   Beim normalen Aufruf lassen sich `--org/--id/--secret/--endpoint` auch als `PANGOLIN_ORG`,
-  `PANGOLIN_CLIENT_ID`, `PANGOLIN_CLIENT_SECRET`, `PANGOLIN_ENDPOINT` setzen; im Kindmodus
-  (`PANGOLIN_SUBPROCESS=1`) wird `PANGOLIN_CLIENT_SECRET` ignoriert (Server antwortet 401).
+  `PANGOLIN_CLIENT_ID`, `PANGOLIN_CLIENT_SECRET`, `PANGOLIN_ENDPOINT` setzen.
   Achtung: `up.override_dns=false` gibt die CLI beim sudo-Weg nicht weiter (nur `true`-Werte).
 - Systemdienst-Modus (`install.sh --system-service`, `pangolin_gui/service.py`): Ist
   `pangolin-gui@.service` installiert, startet/stoppt `cli.up()`/`cli.down()` den Dienst per

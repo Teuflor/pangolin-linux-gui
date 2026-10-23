@@ -116,6 +116,7 @@ def test_env_names_the_user():
     assert "PANGOLIN_CLIENT_SECRET" not in env  # ignored by the CLI's child mode
     assert env["SUDO_USER"] == user.pw_name
     assert env["PANGOLIN_SUBPROCESS"] == "1"
+    assert env["PANGOLIN_CREDENTIALS_FROM_KEYRING"] == "1"
     assert env["HOME"] == "/root"
 
 
