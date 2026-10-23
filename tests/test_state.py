@@ -43,7 +43,7 @@ class FakeOlm:
 @pytest.fixture
 def accounts_file(tmp_path):
     path = tmp_path / "accounts.json"
-    path.write_text(json.dumps({"activeUserId": "u1", "accounts": {
+    path.write_text(json.dumps({"activeuserid": "u1", "accounts": {
         "u1": {"userId": "u1", "host": "https://p.example", "email": "a@example.com",
                "sessionToken": "tok", "orgId": "o1"}}}))
     return path
@@ -111,7 +111,7 @@ def test_error_clears_transition(accounts_file, monkeypatch, no_cli):
 def test_accounts_reloaded_on_change(accounts_file, monkeypatch, no_cli):
     mgr, seen, calls = make_manager(accounts_file, FakeOlm(None), monkeypatch)
     mgr._poll_once()
-    accounts_file.write_text(json.dumps({"activeUserId": "", "accounts": {}}))
+    accounts_file.write_text(json.dumps({"activeuserid": "", "accounts": {}}))
     import os
     st = accounts_file.stat()
     os.utime(accounts_file, (st.st_atime, st.st_mtime + 5))

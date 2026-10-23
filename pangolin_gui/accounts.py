@@ -47,7 +47,8 @@ def load_accounts(path: Path | None = None) -> tuple[list[Account], Account | No
         ))
     accounts.sort(key=lambda a: a.display_name.lower())
 
-    active_id = data.get("activeUserId") or ""
+    # The CLI writes "activeuserid"; accept the camelCase spelling too.
+    active_id = data.get("activeuserid") or data.get("activeUserId") or ""
     active = next((a for a in accounts if a.user_id == active_id), None)
     return accounts, active
 
