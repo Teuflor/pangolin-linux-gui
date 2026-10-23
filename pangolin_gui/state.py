@@ -8,14 +8,16 @@ import time
 from pathlib import Path
 from typing import Callable, Optional
 
-from pangolin_gui import accounts, cli
+from pangolin_gui import accounts, cli, netinfo
 from pangolin_gui.api import ApiError, PangolinApi
+from pangolin_gui.i18n import _
 from pangolin_gui.models import AppState, ConnState, OlmStatus
 from pangolin_gui.olm_socket import OlmClient, OlmError
 
 log = logging.getLogger(__name__)
 
 TRANSITION_TIMEOUT = 120.0  # seconds before a stuck Connecting…/Disconnecting… is dropped
+CLIENTS_INTERVAL = 30.0     # seconds between REST calls for the online-clients list
 
 
 def derive_conn(status: Optional[OlmStatus], transition: Optional[ConnState]) -> ConnState:
@@ -48,6 +50,8 @@ class StateManager:
         self._accounts_mtime: Optional[float] = -1.0
         self._orgs_for: Optional[tuple[str, str]] = None
         self._orgs_dirty = True
+        self._clients_at = 0.0
+        self._clients_key: Optional[tuple[str, str, str]] = None
         self._thread: Optional[threading.Thread] = None
 
     # -- public API (thread-safe) -------------------------------------------------
@@ -64,9 +68,12 @@ class StateManager:
         with self._lock:
             return copy.deepcopy(self._state)
 
-    def refresh_now(self, reload_orgs: bool = False, reload_cli: bool = False) -> None:
+    def refresh_now(self, reload_orgs: bool = False, reload_cli: bool = False,
+                    reload_clients: bool = False) -> None:
         if reload_orgs:
             self._orgs_dirty = True
+        if reload_clients:
+            self._clients_at = 0.0
         if reload_cli:
             self._refresh_cli()
         self._wake.set()
@@ -116,6 +123,7 @@ class StateManager:
 
         self._reload_accounts()
         self._reload_orgs()
+        self._reload_clients(status)
 
         with self._lock:
             transition = self._transition
@@ -168,8 +176,34 @@ class StateManager:
             log.warning("could not load organizations: %s", exc)
             if exc.auth_expired:
                 with self._lock:
-                    self._state.last_error = "Session expired. Please log in again."
+                    self._state.last_error = _("Session expired. Please log in again.")
             return
         with self._lock:
             self._state.orgs = orgs
         self._orgs_for = (active.user_id, active.host)
+
+    def _reload_clients(self, status: Optional[OlmStatus]) -> None:
+        """Online clients of the current org, only while connected and at most every 30 s."""
+        with self._lock:
+            active = copy.deepcopy(self._state.active_account)
+        connected = bool(status and status.connected and status.registered)
+        org_id = (status.org_id if status else "") or (active.org_id if active else "")
+        if not connected or active is None or not org_id or not active.session_token:
+            self._clients_key = None
+            with self._lock:
+                self._state.clients, self._state.clients_error = [], ""
+            return
+        key = (active.user_id, active.host, org_id)
+        if key == self._clients_key and time.monotonic() - self._clients_at < CLIENTS_INTERVAL:
+            return
+        self._clients_key, self._clients_at = key, time.monotonic()
+        try:
+            clients = PangolinApi(active).list_online_clients(org_id)
+            error = ""
+        except ApiError as exc:
+            clients, error = [], ("forbidden" if exc.forbidden else str(exc))
+            log.info("could not list clients: %s", exc)
+        own_ip = netinfo.interface_ipv4()
+        clients = [c for c in clients if c.address != own_ip]
+        with self._lock:
+            self._state.clients, self._state.clients_error = clients, error

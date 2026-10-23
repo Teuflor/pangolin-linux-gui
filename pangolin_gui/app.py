@@ -11,7 +11,8 @@ import gi
 gi.require_version("Gtk", "3.0")
 from gi.repository import Gio, GLib, Gtk  # noqa: E402
 
-from pangolin_gui import cli, settings  # noqa: E402
+from pangolin_gui import cli, i18n, settings  # noqa: E402
+from pangolin_gui.i18n import _  # noqa: E402
 from pangolin_gui.models import AppState, ConnState  # noqa: E402
 from pangolin_gui.olm_socket import OlmClient, OlmError  # noqa: E402
 from pangolin_gui.state import StateManager  # noqa: E402
@@ -38,6 +39,7 @@ class PangolinApp(Gtk.Application):
     # -- Gtk.Application ----------------------------------------------------------
     def do_startup(self):
         Gtk.Application.do_startup(self)
+        i18n.set_language(settings.GuiSettings.load().language)
         self.hold()  # keep running without windows (tray app)
         from pangolin_gui.tray import TrayIcon
         try:
@@ -120,7 +122,7 @@ class PangolinApp(Gtk.Application):
     def _require_cli(self) -> bool:
         if cli.find_cli():
             return True
-        self._report_error("The Pangolin CLI is not installed. See More → Install Pangolin CLI…")
+        self._report_error(_("The Pangolin CLI is not installed. See More → Install Pangolin CLI…"))
         return False
 
     # -- controller API used by tray and windows ----------------------------------
@@ -137,7 +139,7 @@ class PangolinApp(Gtk.Application):
 
     def _connect_failed(self, message: str):
         if "incorrect password" in message.lower() or "a password is required" in message.lower():
-            message = "Authentication failed or was cancelled."
+            message = _("Authentication failed or was cancelled.")
         self._report_error(message)
 
     def disconnect(self):
@@ -188,12 +190,12 @@ class PangolinApp(Gtk.Application):
     def on_login_finished(self, ok: bool):
         self.state_mgr.refresh_now(reload_orgs=True)
         if ok:
-            self.notify("Pangolin", "Logged in successfully.")
+            self.notify("Pangolin", _("Logged in successfully."))
 
     def logout(self):
         dialog = Gtk.MessageDialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.OK_CANCEL,
-                                   text="Log out of Pangolin?")
-        dialog.format_secondary_text("Any active connection will be disconnected.")
+                                   text=_("Log out of Pangolin?"))
+        dialog.format_secondary_text(_("Any active connection will be disconnected."))
         response = dialog.run()
         dialog.destroy()
         if response != Gtk.ResponseType.OK:
@@ -236,6 +238,28 @@ class PangolinApp(Gtk.Application):
         window.update(self.get_state())
         window.present_window()
 
+    def copy_client_ip(self, ip: str, name: str = ""):
+        from pangolin_gui import clipboard
+        if clipboard.copy_text(ip):
+            self.notify("Pangolin", _("Copied {ip} ({name}) to the clipboard.").format(ip=ip, name=name or ip))
+        else:
+            self._report_error(_("Could not access the clipboard. Install wl-clipboard or xclip."))
+
+    def refresh_clients(self):
+        self.state_mgr.refresh_now(reload_clients=True)
+
+    def apply_language(self, code: str):
+        """Switch the UI language at runtime: rebuild tray, recreate windows."""
+        i18n.set_language(code)
+        reopen = [name for name, w in self._windows.items() if w.get_visible() and name != "preferences"]
+        for window in self._windows.values():
+            window.destroy()
+        self._windows.clear()
+        if self.tray is not None:
+            self.tray.rebuild()
+        for name in reopen:
+            self._window(name)
+
     def open_status(self):
         self._window("status")
 
@@ -249,7 +273,7 @@ class PangolinApp(Gtk.Application):
         try:
             Gio.AppInfo.launch_default_for_uri(url, None)
         except GLib.Error as exc:
-            self._report_error(f"Could not open browser: {exc.message}")
+            self._report_error(_("Could not open browser: {error}").format(error=exc.message))
 
     def quit(self):
         # The tunnel daemon keeps running independently, like `pangolin up` does.

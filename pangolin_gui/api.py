@@ -5,17 +5,23 @@ import json
 import ssl
 import urllib.error
 import urllib.request
-from urllib.parse import quote
+from urllib.parse import quote, urlencode
 
-from pangolin_gui.models import Account, Org
+from pangolin_gui.models import Account, Org, OrgClient
 
 
 class ApiError(Exception):
-    """API call failed. `auth_expired` is True for HTTP 401/403."""
+    """API call failed. `auth_expired` is True for HTTP 401, `forbidden` for HTTP 403."""
 
-    def __init__(self, message: str, auth_expired: bool = False):
+    def __init__(self, message: str, auth_expired: bool = False, forbidden: bool = False):
         super().__init__(message)
         self.auth_expired = auth_expired
+        self.forbidden = forbidden
+
+
+def strip_prefix(subnet: str | None) -> str:
+    """"100.90.128.5/32" -> "100.90.128.5"."""
+    return (subnet or "").split("/")[0].strip()
 
 
 def build_base_url(host: str) -> str:
@@ -56,11 +62,55 @@ class PangolinApi:
 
         if status >= 400 or not body.get("success", False):
             msg = body.get("message") or (body.get("error") if isinstance(body.get("error"), str) else "")
-            raise ApiError(msg or f"HTTP {status}", auth_expired=status in (401, 403))
+            raise ApiError(msg or f"HTTP {status}", auth_expired=status == 401, forbidden=status == 403)
         return body.get("data") or {}
+
+    def list_online_clients(self, org_id: str) -> list[OrgClient]:
+        """Online clients of an org: machine clients plus user devices, deduplicated.
+
+        Both endpoints need the `listClients` permission (usually admins). If both
+        are forbidden, ApiError(forbidden=True) is raised.
+        """
+        org = quote(org_id, safe="")
+        query = urlencode({"online": "true", "pageSize": 200})
+        found: dict[int, OrgClient] = {}
+        forbidden = 0
+        for path, key in ((f"/org/{org}/clients?{query}", "clients"),
+                          (f"/org/{org}/user-devices?{query}", "devices")):
+            try:
+                data = self._request("GET", path)
+            except ApiError as exc:
+                if exc.forbidden:
+                    forbidden += 1
+                    continue
+                raise
+            for item in data.get(key) or []:
+                client = _parse_client(item)
+                if client and client.online and client.client_id not in found:
+                    found[client.client_id] = client
+        if forbidden == 2:
+            raise ApiError("forbidden", forbidden=True)
+        return sorted(found.values(), key=lambda c: (c.name.lower(), c.address))
 
     def list_orgs(self) -> list[Org]:
         data = self._request("GET", f"/user/{quote(self._account.user_id, safe='')}/orgs")
         orgs = [Org(org_id=o["orgId"], name=o.get("name") or o["orgId"])
                 for o in data.get("orgs") or []]
         return sorted(orgs, key=lambda o: o.name.lower())
+
+
+def _parse_client(item: dict) -> OrgClient | None:
+    try:
+        client_id = int(item.get("clientId"))
+    except (TypeError, ValueError):
+        return None
+    address = strip_prefix(item.get("subnet"))
+    if not address or item.get("blocked") or item.get("archived"):
+        return None
+    return OrgClient(
+        client_id=client_id,
+        name=item.get("name") or item.get("niceId") or f"#{client_id}",
+        address=address,
+        online=bool(item.get("online")),
+        owner=item.get("userEmail") or item.get("email") or item.get("username") or "",
+    )

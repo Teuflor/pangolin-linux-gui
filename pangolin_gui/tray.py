@@ -10,7 +10,8 @@ import pathlib
 from datetime import datetime, timezone
 from typing import Any, Optional, Tuple
 
-from pangolin_gui.models import AppState, ConnState, Peer
+from pangolin_gui.i18n import _
+from pangolin_gui.models import AppState, ConnState, OrgClient, Peer
 
 # Guarded imports so pure helpers can be imported and tested without GTK installed
 _GTK_AVAILABLE = False
@@ -61,14 +62,14 @@ def get_status_label(state: AppState) -> str:
             return state.last_error
         if state.status and state.status.error_message:
             return state.status.error_message
-        return "Error"
+        return _("Error")
     if state.conn == ConnState.CONNECTED:
-        return "Connected"
+        return _("Connected")
     if state.conn == ConnState.CONNECTING:
-        return "Registering…"
+        return _("Registering…")
     if state.conn == ConnState.DISCONNECTING:
-        return "Disconnecting…"
-    return "Disconnected"
+        return _("Disconnecting…")
+    return _("Disconnected")
 
 
 def get_status_color(state: AppState) -> str:
@@ -125,12 +126,12 @@ def format_relative_time(iso_str: Optional[str], now: Optional[datetime] = None)
         seconds = 0
 
     if seconds < 60:
-        return f"{seconds}s ago"
+        return _("{seconds}s ago").format(seconds=seconds)
     elif seconds < 3600:
-        return f"{seconds // 60}m ago"
+        return _("{minutes}m ago").format(minutes=seconds // 60)
     elif seconds < 86400:
-        return f"{seconds // 3600}h ago"
-    return f"{seconds // 86400}d ago"
+        return _("{hours}h ago").format(hours=seconds // 3600)
+    return _("{days}d ago").format(days=seconds // 86400)
 
 
 # Alias
@@ -140,10 +141,10 @@ relative_time = format_relative_time
 def peer_connection_type(peer: Peer) -> str:
     """Return peer connection type: 'Local', 'Relay', or 'Direct'."""
     if getattr(peer, "is_local", False):
-        return "Local"
+        return _("Local")
     if getattr(peer, "is_relay", False):
-        return "Relay"
-    return "Direct"
+        return _("Relay")
+    return _("Direct")
 
 
 # Alias
@@ -195,7 +196,20 @@ def compute_menu_signature(state: AppState) -> tuple:
         accounts_sig,
         orgs_sig,
         peers_sig,
+        clients_signature(state),
     )
+
+
+def clients_signature(state: AppState) -> tuple:
+    if state.conn != ConnState.CONNECTED:
+        return ()
+    return (state.clients_error,
+            tuple((c.client_id, c.name, c.address, c.owner) for c in state.clients))
+
+
+def client_menu_label(client: OrgClient) -> str:
+    """Menu text for an online client, e.g. "laptop-anna  ·  100.90.128.7"."""
+    return f"{client.name}  ·  {client.address}"
 
 
 # Alias
@@ -249,8 +263,9 @@ class TrayIcon:
             self._status_icon.connect("activate", self._on_status_icon_activate)
             self._apply_status_icon_image(connected=False)
 
+        self._last_state: AppState = AppState()
         # AppIndicator needs a menu before the first state arrives
-        self.update(AppState())
+        self.update(self._last_state)
 
     def _on_status_icon_popup(self, status_icon: Any, button: int, activate_time: int) -> None:
         if self._menu:
@@ -262,6 +277,7 @@ class TrayIcon:
 
     def update(self, state: AppState) -> None:
         """Update tray menu and icon from AppState, rebuilding menu only when signature changes."""
+        self._last_state = state
         sig = compute_menu_signature(state)
         if sig != self._menu_signature or self._menu is None:
             self._menu_signature = sig
@@ -273,6 +289,11 @@ class TrayIcon:
         is_connected = (state.conn == ConnState.CONNECTED)
         self._update_icon(is_connected)
         self._update_tooltip(state)
+
+    def rebuild(self) -> None:
+        """Reset the cached menu signature and rebuild the menu from the last state."""
+        self._menu_signature = None
+        self.update(self._last_state)
 
     def _update_icon(self, connected: bool) -> None:
         filename = "pangolin-orange.png" if connected else "pangolin-gray.png"
@@ -313,7 +334,7 @@ class TrayIcon:
 
     def _update_tooltip(self, state: AppState) -> None:
         status_text = get_status_label(state)
-        tooltip = f"Pangolin: {status_text}"
+        tooltip = _("Pangolin: {status}").format(status=status_text)
         if self._status_icon is not None:
             try:
                 self._status_icon.set_tooltip_text(tooltip)
@@ -330,7 +351,7 @@ class TrayIcon:
 
         if not state.accounts:
             # No account -> "Log In…" item instead of account/org sections
-            login_item = Gtk.MenuItem(label="Log In…")
+            login_item = Gtk.MenuItem(label=_("Log In…"))
 
             def on_login(_: Any) -> None:
                 if hasattr(self.controller, "add_account"):
@@ -353,7 +374,7 @@ class TrayIcon:
 
         # 2. Connect/Disconnect toggle
         is_connected = (state.conn in (ConnState.CONNECTED, ConnState.CONNECTING))
-        toggle_label = "Disconnect" if is_connected else "Connect"
+        toggle_label = _("Disconnect") if is_connected else _("Connect")
         toggle_item = Gtk.CheckMenuItem(label=toggle_label)
         self._connect_toggle_handler = toggle_item.connect("toggled", self._on_connect_toggled)
         toggle_item.handler_block(self._connect_toggle_handler)
@@ -365,10 +386,10 @@ class TrayIcon:
 
         # 3. "Sites" submenu (when connected)
         if state.conn == ConnState.CONNECTED:
-            sites_item = Gtk.MenuItem(label="Sites")
+            sites_item = Gtk.MenuItem(label=_("Sites"))
             sites_menu = Gtk.Menu()
 
-            open_status_item = Gtk.MenuItem(label="Open Status…")
+            open_status_item = Gtk.MenuItem(label=_("Open Status…"))
             open_status_item.connect("activate", lambda _: self.controller.open_status())
             sites_menu.append(open_status_item)
             sites_menu.append(Gtk.SeparatorMenuItem())
@@ -380,27 +401,28 @@ class TrayIcon:
                     peer_menu = Gtk.Menu()
 
                     # Status
-                    st_label = f"Status: {'Connected' if peer.connected else 'Disconnected'}"
+                    st_val = _("Connected") if peer.connected else _("Disconnected")
+                    st_label = _("Status: {status}").format(status=st_val)
                     st_item = Gtk.MenuItem(label=st_label)
                     st_item.set_sensitive(False)
                     peer_menu.append(st_item)
 
                     # Connection Direct/Relay/Local
                     conn_type = peer_connection_type(peer)
-                    conn_item = Gtk.MenuItem(label=f"Connection: {conn_type}")
+                    conn_item = Gtk.MenuItem(label=_("Connection: {type}").format(type=conn_type))
                     conn_item.set_sensitive(False)
                     peer_menu.append(conn_item)
 
                     # Endpoint
                     ep_val = peer.endpoint if peer.endpoint else "—"
-                    ep_item = Gtk.MenuItem(label=f"Endpoint: {ep_val}")
+                    ep_item = Gtk.MenuItem(label=_("Endpoint: {endpoint}").format(endpoint=ep_val))
                     ep_item.set_sensitive(False)
                     peer_menu.append(ep_item)
 
                     # Last Seen relative
                     ls_rel = format_relative_time(peer.last_seen)
                     ls_val = ls_rel if ls_rel else "—"
-                    ls_item = Gtk.MenuItem(label=f"Last Seen: {ls_val}")
+                    ls_item = Gtk.MenuItem(label=_("Last Seen: {last_seen}").format(last_seen=ls_val))
                     ls_item.set_sensitive(False)
                     peer_menu.append(ls_item)
 
@@ -409,24 +431,25 @@ class TrayIcon:
                         rtt_val = f"{peer.rtt_ms:.1f} ms"
                     else:
                         rtt_val = "—"
-                    rtt_item = Gtk.MenuItem(label=f"RTT: {rtt_val}")
+                    rtt_item = Gtk.MenuItem(label=_("RTT: {rtt}").format(rtt=rtt_val))
                     rtt_item.set_sensitive(False)
                     peer_menu.append(rtt_item)
 
                     peer_item.set_submenu(peer_menu)
                     sites_menu.append(peer_item)
             else:
-                no_sites = Gtk.MenuItem(label="No sites")
+                no_sites = Gtk.MenuItem(label=_("No sites"))
                 no_sites.set_sensitive(False)
                 sites_menu.append(no_sites)
 
             sites_item.set_submenu(sites_menu)
             menu.append(sites_item)
+            menu.append(self._build_clients_submenu(state))
 
         menu.append(Gtk.SeparatorMenuItem())
 
         # 4. "Account" submenu
-        account_item = Gtk.MenuItem(label="Account")
+        account_item = Gtk.MenuItem(label=_("Account"))
         account_menu = Gtk.Menu()
 
         email_counts: dict[str, int] = {}
@@ -453,11 +476,11 @@ class TrayIcon:
 
         account_menu.append(Gtk.SeparatorMenuItem())
 
-        add_acc_item = Gtk.MenuItem(label="Add Account…")
+        add_acc_item = Gtk.MenuItem(label=_("Add Account…"))
         add_acc_item.connect("activate", lambda _: self.controller.add_account())
         account_menu.append(add_acc_item)
 
-        logout_item = Gtk.MenuItem(label="Log Out")
+        logout_item = Gtk.MenuItem(label=_("Log Out"))
         logout_item.connect("activate", lambda _: self.controller.logout())
         if not active_uid:
             logout_item.set_sensitive(False)
@@ -467,7 +490,7 @@ class TrayIcon:
         menu.append(account_item)
 
         # 5. "Organization" submenu
-        org_item = Gtk.MenuItem(label="Organization")
+        org_item = Gtk.MenuItem(label=_("Organization"))
         org_menu = Gtk.Menu()
 
         active_org_id = (
@@ -477,7 +500,7 @@ class TrayIcon:
         )
 
         if not state.orgs:
-            empty_item = Gtk.MenuItem(label="No Organizations")
+            empty_item = Gtk.MenuItem(label=_("No Organizations"))
             empty_item.set_sensitive(False)
             org_menu.append(empty_item)
         else:
@@ -503,12 +526,50 @@ class TrayIcon:
 
         return menu
 
+    def _build_clients_submenu(self, state: AppState) -> Gtk.MenuItem:
+        """Online clients of the org; clicking one copies its tunnel IP."""
+        count = len(state.clients)
+        title = _("Online Clients ({count})").format(count=count) if count else _("Online Clients")
+        clients_item = Gtk.MenuItem(label=title)
+        sub = Gtk.Menu()
+
+        if state.clients:
+            hint = Gtk.MenuItem(label=_("Click to copy the IP address"))
+            hint.set_sensitive(False)
+            sub.append(hint)
+            sub.append(Gtk.SeparatorMenuItem())
+            for client in state.clients:
+                item = Gtk.MenuItem(label=client_menu_label(client))
+                if client.owner:
+                    item.set_tooltip_text(client.owner)
+                item.connect("activate", lambda _w, ip=client.address, name=client.name:
+                             self.controller.copy_client_ip(ip, name))
+                sub.append(item)
+        else:
+            if state.clients_error == "forbidden":
+                text = _("Your role may not list clients")
+            elif state.clients_error:
+                text = _("Could not load clients")
+            else:
+                text = _("No other clients online")
+            empty = Gtk.MenuItem(label=text)
+            empty.set_sensitive(False)
+            sub.append(empty)
+
+        sub.append(Gtk.SeparatorMenuItem())
+        refresh = Gtk.MenuItem(label=_("Refresh"))
+        refresh.connect("activate", lambda _w: self.controller.refresh_clients())
+        sub.append(refresh)
+
+        clients_item.set_submenu(sub)
+        return clients_item
+
     def _append_common_items(self, menu: Gtk.Menu, state: AppState) -> None:
-        pref_item = Gtk.MenuItem(label="Preferences…")
+        pref_item = Gtk.MenuItem(label=_("Preferences…"))
         pref_item.connect("activate", lambda _: self.controller.open_preferences())
         menu.append(pref_item)
 
-        logs_item = Gtk.MenuItem(label="Logs…")
+        logs_item = Gtk.MenuItem(label=_("Logs…"))
         logs_item.connect("activate", lambda _: self.controller.open_logs())
         menu.append(logs_item)
 
@@ -517,15 +578,15 @@ class TrayIcon:
 
         menu.append(Gtk.SeparatorMenuItem())
 
-        quit_item = Gtk.MenuItem(label="Quit Pangolin")
+        quit_item = Gtk.MenuItem(label=_("Quit Pangolin"))
         quit_item.connect("activate", lambda _: self.controller.quit())
         menu.append(quit_item)
 
     def _build_more_submenu(self, state: AppState) -> Gtk.MenuItem:
-        more_item = Gtk.MenuItem(label="More")
+        more_item = Gtk.MenuItem(label=_("More"))
         more_menu = Gtk.Menu()
 
-        docs_item = Gtk.MenuItem(label="Documentation")
+        docs_item = Gtk.MenuItem(label=_("Documentation"))
         docs_item.connect("activate", lambda _: self.controller.open_url("https://docs.pangolin.net"))
         more_menu.append(docs_item)
 
@@ -534,13 +595,13 @@ class TrayIcon:
         ver = state.cli_version
         if not ver and state.status and state.status.version:
             ver = state.status.version
-        ver_label = f"Version {ver}" if ver else "Version unknown"
+        ver_label = _("Version {version}").format(version=ver) if ver else _("Version unknown")
         ver_item = Gtk.MenuItem(label=ver_label)
         ver_item.set_sensitive(False)
         more_menu.append(ver_item)
 
         if not state.cli_installed:
-            cli_item = Gtk.MenuItem(label="Install Pangolin CLI…")
+            cli_item = Gtk.MenuItem(label=_("Install Pangolin CLI…"))
             cli_item.connect(
                 "activate",
                 lambda _: self.controller.open_url("https://docs.pangolin.net/manage/clients/install-client"),

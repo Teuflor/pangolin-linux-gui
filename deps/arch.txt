@@ -5,3 +5,5 @@ python-gobject
 gtk3
 libayatana-appindicator
 sudo
+wl-clipboard
+xclip

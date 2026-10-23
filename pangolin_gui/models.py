@@ -75,6 +75,16 @@ class Org:
 
 
 @dataclass
+class OrgClient:
+    """Another device/client in the organization (from the REST API)."""
+    client_id: int
+    name: str
+    address: str                     # tunnel IP without prefix length, e.g. "100.90.128.5"
+    online: bool
+    owner: str = ""                  # user email/username for user devices, "" for machine clients
+
+
+@dataclass
 class AppState:
     """Snapshot the UI renders. Produced by state.StateManager."""
     conn: ConnState = ConnState.DISCONNECTED
@@ -82,6 +92,8 @@ class AppState:
     accounts: list[Account] = field(default_factory=list)
     active_account: Optional[Account] = None
     orgs: list[Org] = field(default_factory=list)
+    clients: list[OrgClient] = field(default_factory=list)   # online clients except this device
+    clients_error: str = ""          # "forbidden" when the role may not list clients, else message
     cli_installed: bool = True
     cli_version: str = ""
     last_error: str = ""

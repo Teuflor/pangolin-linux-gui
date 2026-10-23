@@ -7,6 +7,7 @@ gi.require_version("Gtk", "3.0")
 gi.require_version("Gdk", "3.0")
 from gi.repository import Gdk, GLib, Gtk  # noqa: E402
 
+from pangolin_gui.i18n import _  # noqa: E402
 from pangolin_gui.models import AppState  # noqa: E402
 
 _LEVEL_TAGS = (("error", (" ERROR", "level=error", "[ERROR]")),
@@ -23,7 +24,7 @@ def line_tag(line: str) -> str | None:
 
 class LogsWindow(Gtk.Window):
     def __init__(self, controller):
-        super().__init__(title="Pangolin Logs")
+        super().__init__(title=_("Pangolin Logs"))
         self.controller = controller
         self._timer_id = None
         self._loading = False
@@ -39,18 +40,18 @@ class LogsWindow(Gtk.Window):
 
         bar = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=6)
         root.pack_start(bar, False, False, 0)
-        refresh = Gtk.Button(label="Refresh")
+        refresh = Gtk.Button(label=_("Refresh"))
         refresh.connect("clicked", lambda *_: self.refresh())
         bar.pack_start(refresh, False, False, 0)
-        self.auto_check = Gtk.CheckButton(label="Auto-refresh", active=True)
+        self.auto_check = Gtk.CheckButton(label=_("Auto-refresh"), active=True)
         self.auto_check.connect("toggled", lambda *_: self._on_visibility(self.get_visible()))
         bar.pack_start(self.auto_check, False, False, 0)
-        self.follow_check = Gtk.CheckButton(label="Follow", active=True)
+        self.follow_check = Gtk.CheckButton(label=_("Follow"), active=True)
         bar.pack_start(self.follow_check, False, False, 0)
-        copy = Gtk.Button(label="Copy all")
+        copy = Gtk.Button(label=_("Copy all"))
         copy.connect("clicked", self._on_copy)
         bar.pack_start(copy, False, False, 0)
-        self.search = Gtk.SearchEntry(placeholder_text="Search")
+        self.search = Gtk.SearchEntry(placeholder_text=_("Search"))
         self.search.connect("search-changed", lambda *_: self._highlight())
         bar.pack_end(self.search, False, False, 0)
 
@@ -59,7 +60,7 @@ class LogsWindow(Gtk.Window):
         self.buffer.create_tag("error", foreground="#ef4444")
         self.buffer.create_tag("warn", foreground="#f97316")
         self.buffer.create_tag("debug", foreground="#9ca3af")
-        self.buffer.set_text("Loading…")
+        self.buffer.set_text(_("Loading…"))
         self.view = Gtk.TextView(buffer=self.buffer, editable=False, monospace=True,
                                  cursor_visible=False, wrap_mode=Gtk.WrapMode.WORD_CHAR)
         scroller = Gtk.ScrolledWindow(vexpand=True)
@@ -103,7 +104,7 @@ class LogsWindow(Gtk.Window):
         if text == self._last_text:
             return False
         self._last_text = text
-        self.buffer.set_text(text or "(log is empty)")
+        self.buffer.set_text(text or _("(log is empty)"))
         if not text.startswith("ERROR:"):
             for n, line in enumerate(text.splitlines()):
                 tag = line_tag(line)

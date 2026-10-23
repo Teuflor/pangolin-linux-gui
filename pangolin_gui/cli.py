@@ -16,6 +16,8 @@ import time
 from pathlib import Path
 from typing import Callable
 
+from pangolin_gui.i18n import _
+
 # Regex matching ANSI escape sequences (colors, cursor movement, OSC, etc.)
 ANSI_ESCAPE_RE = re.compile(
     r"\x1b(?:"
@@ -89,7 +91,7 @@ def _run_cli(
     """Execute a Pangolin CLI subcommand with argument list and return stripped stdout."""
     cli_path = find_cli()
     if not cli_path:
-        raise CliError("pangolin CLI binary not found")
+        raise CliError(_("pangolin CLI binary not found"))
 
     full_cmd = [cli_path] + args
     try:
@@ -104,7 +106,11 @@ def _run_cli(
             start_new_session=start_new_session,
         )
     except subprocess.TimeoutExpired as e:
-        raise CliError(f"Command '{' '.join(full_cmd)}' timed out after {timeout}s") from e
+        raise CliError(
+            _("Command '{command}' timed out after {timeout}s").format(
+                command=" ".join(full_cmd), timeout=timeout
+            )
+        ) from e
     except Exception as e:
         raise CliError(f"Failed to execute '{' '.join(full_cmd)}': {e}") from e
 
@@ -243,7 +249,7 @@ class LoginSession:
     def _run(self) -> None:
         cli_path = find_cli()
         if not cli_path:
-            self._finish(False, "pangolin CLI binary not found")
+            self._finish(False, _("pangolin CLI binary not found"))
             return
 
         clean_host = self.host.strip()
@@ -260,7 +266,7 @@ class LoginSession:
             master_fd, slave_fd = os.openpty()
             self._master_fd = master_fd
         except Exception as e:
-            self._finish(False, f"Failed to allocate pty: {e}")
+            self._finish(False, _("Failed to allocate pty: {error}").format(error=e))
             return
 
         try:
@@ -282,7 +288,7 @@ class LoginSession:
             except OSError:
                 pass
             self._master_fd = None
-            self._finish(False, f"Failed to start pangolin: {e}")
+            self._finish(False, _("Failed to start pangolin: {error}").format(error=e))
             return
 
         try:
@@ -297,7 +303,7 @@ class LoginSession:
 
         try:
             while not self._cancelled:
-                r, _, _ = select.select([master_fd], [], [], 0.1)
+                r, _w, _x = select.select([master_fd], [], [], 0.1)
                 if r:
                     try:
                         data = os.read(master_fd, 1024)
@@ -353,7 +359,7 @@ class LoginSession:
                 if self._proc.poll() is not None:
                     # Drain any remaining bytes
                     while True:
-                        r, _, _ = select.select([master_fd], [], [], 0.05)
+                        r, _w, _x = select.select([master_fd], [], [], 0.05)
                         if not r:
                             break
                         try:
@@ -373,7 +379,7 @@ class LoginSession:
             self._master_fd = None
 
         if self._cancelled:
-            self._finish(False, "Login cancelled")
+            self._finish(False, _("Login cancelled"))
             return
 
         # The pty can report EOF slightly before the child is reaped.
@@ -385,8 +391,8 @@ class LoginSession:
         full_output = strip_ansi("".join(output_chunks)).strip()
 
         if exit_code == 0:
-            self._finish(True, "Login successful")
+            self._finish(True, _("Login successful"))
         else:
             lines = [line.strip() for line in full_output.splitlines() if line.strip()]
-            err_msg = lines[-1] if lines else f"Login failed (exit code {exit_code})"
+            err_msg = lines[-1] if lines else _("Login failed (exit code {code})").format(code=exit_code)
             self._finish(False, err_msg)

@@ -7,17 +7,28 @@ from datetime import datetime, timezone
 import gi
 
 gi.require_version("Gtk", "3.0")
-from gi.repository import Gtk  # noqa: E402
+from gi.repository import GLib, Gtk  # noqa: E402
 
+from pangolin_gui.i18n import _, N_  # noqa: E402
 from pangolin_gui.models import AppState, ConnState  # noqa: E402
 
 _DOT = {
-    ConnState.CONNECTED: ("#22c55e", "Connected"),
-    ConnState.CONNECTING: ("#f97316", "Connecting…"),
-    ConnState.DISCONNECTING: ("#9ca3af", "Disconnecting…"),
-    ConnState.DISCONNECTED: ("#9ca3af", "Disconnected"),
-    ConnState.ERROR: ("#ef4444", "Error"),
+    ConnState.CONNECTED: ("#22c55e", N_("Connected")),
+    ConnState.CONNECTING: ("#f97316", N_("Connecting…")),
+    ConnState.DISCONNECTING: ("#9ca3af", N_("Disconnecting…")),
+    ConnState.DISCONNECTED: ("#9ca3af", N_("Disconnected")),
+    ConnState.ERROR: ("#ef4444", N_("Error")),
 }
+
+_COLUMN_TITLES = (
+    N_("Site"),
+    N_("Status"),
+    N_("Connection"),
+    N_("Endpoint"),
+    N_("Peer IP"),
+    N_("RTT"),
+    N_("Last seen"),
+)
 
 
 def format_relative(iso: str | None, now: datetime | None = None) -> str:
@@ -37,14 +48,14 @@ def format_relative(iso: str | None, now: datetime | None = None) -> str:
     now = now or datetime.now(timezone.utc)
     seconds = int((now - dt).total_seconds())
     if seconds < 5:
-        return "just now"
+        return _("just now")
     if seconds < 60:
-        return f"{seconds} s ago"
+        return _("{seconds} s ago").format(seconds=seconds)
     if seconds < 3600:
-        return f"{seconds // 60} min ago"
+        return _("{minutes} min ago").format(minutes=seconds // 60)
     if seconds < 86400:
-        return f"{seconds // 3600} h ago"
-    return f"{seconds // 86400} d ago"
+        return _("{hours} h ago").format(hours=seconds // 3600)
+    return _("{days} d ago").format(days=seconds // 86400)
 
 
 def org_display_name(state: AppState) -> str:
@@ -63,7 +74,7 @@ class StatusWindow(Gtk.Window):
     COL_ID, COL_NAME, COL_STATUS, COL_CONN, COL_ENDPOINT, COL_IP, COL_RTT_TEXT, COL_SEEN, COL_RTT = range(9)
 
     def __init__(self, controller):
-        super().__init__(title="Pangolin Status")
+        super().__init__(title=_("Pangolin Status"))
         self.controller = controller
         self._conn = ConnState.DISCONNECTED
         self.set_default_size(640, 420)
@@ -84,15 +95,20 @@ class StatusWindow(Gtk.Window):
         grid = Gtk.Grid(column_spacing=12, row_spacing=4)
         left.pack_start(grid, False, False, 0)
         self._values = {}
-        for row, key in enumerate(("Account", "Organization", "Version", "Exit node")):
-            name = Gtk.Label(label=key, xalign=0)
+        for row, (label_text, key) in enumerate((
+            (_("Account"), "Account"),
+            (_("Organization"), "Organization"),
+            (_("Version"), "Version"),
+            (_("Exit node"), "Exit node"),
+        )):
+            name = Gtk.Label(label=label_text, xalign=0)
             name.get_style_context().add_class("dim-label")
             value = Gtk.Label(xalign=0, selectable=True)
             grid.attach(name, 0, row, 1, 1)
             grid.attach(value, 1, row, 1, 1)
             self._values[key] = value
 
-        self.action_button = Gtk.Button(label="Connect", valign=Gtk.Align.START)
+        self.action_button = Gtk.Button(label=_("Connect"), valign=Gtk.Align.START)
         self.action_button.connect("clicked", self._on_action)
         header.pack_end(self.action_button, False, False, 0)
 
@@ -104,12 +120,15 @@ class StatusWindow(Gtk.Window):
 
         self.store = Gtk.ListStore(int, str, str, str, str, str, str, str, float)
         self.tree = Gtk.TreeView(model=self.store)
-        columns = [("Site", self.COL_NAME, self.COL_NAME), ("Status", self.COL_STATUS, self.COL_STATUS),
-                   ("Connection", self.COL_CONN, self.COL_CONN), ("Endpoint", self.COL_ENDPOINT, self.COL_ENDPOINT),
-                   ("Peer IP", self.COL_IP, self.COL_IP), ("RTT", self.COL_RTT_TEXT, self.COL_RTT),
-                   ("Last seen", self.COL_SEEN, self.COL_SEEN)]
+        columns = [(_COLUMN_TITLES[0], self.COL_NAME, self.COL_NAME),
+                   (_COLUMN_TITLES[1], self.COL_STATUS, self.COL_STATUS),
+                   (_COLUMN_TITLES[2], self.COL_CONN, self.COL_CONN),
+                   (_COLUMN_TITLES[3], self.COL_ENDPOINT, self.COL_ENDPOINT),
+                   (_COLUMN_TITLES[4], self.COL_IP, self.COL_IP),
+                   (_COLUMN_TITLES[5], self.COL_RTT_TEXT, self.COL_RTT),
+                   (_COLUMN_TITLES[6], self.COL_SEEN, self.COL_SEEN)]
         for title, text_col, sort_col in columns:
-            col = Gtk.TreeViewColumn(title, Gtk.CellRendererText(), text=text_col)
+            col = Gtk.TreeViewColumn(_(title), Gtk.CellRendererText(), text=text_col)
             col.set_sort_column_id(sort_col)
             col.set_resizable(True)
             self.tree.append_column(col)
@@ -120,7 +139,7 @@ class StatusWindow(Gtk.Window):
         scroller.add(self.tree)
         root.pack_start(scroller, True, True, 0)
 
-        self.placeholder = Gtk.Label(label="Connect to see sites.")
+        self.placeholder = Gtk.Label(label=_("Connect to see sites."))
         self.placeholder.get_style_context().add_class("dim-label")
         self.placeholder.set_no_show_all(True)
         root.pack_start(self.placeholder, False, False, 0)
@@ -145,21 +164,25 @@ class StatusWindow(Gtk.Window):
         self._conn = state.conn
         color, text = _DOT[state.conn]
         self.status_label.set_markup(
-            f"<span size='x-large' weight='bold'><span color='{color}'>●</span> {text}</span>")
+            f"<span size='x-large' weight='bold'><span color='{color}'>●</span> {GLib.markup_escape_text(_(text))}</span>")
 
         busy = state.conn in (ConnState.CONNECTING, ConnState.DISCONNECTING)
         self.action_button.set_label(
-            "Disconnect" if state.conn in (ConnState.CONNECTED, ConnState.CONNECTING) else "Connect")
+            _("Disconnect") if state.conn in (ConnState.CONNECTED, ConnState.CONNECTING) else _("Connect"))
         self.action_button.set_sensitive(state.active_account is not None and state.conn != ConnState.DISCONNECTING)
 
         acc = state.active_account
-        self._values["Account"].set_text(f"{acc.display_name} ({acc.host})" if acc else "Not logged in")
+        self._values["Account"].set_text(f"{acc.display_name} ({acc.host})" if acc else _("Not logged in"))
         self._values["Organization"].set_text(org_display_name(state))
         self._values["Version"].set_text((state.status.version if state.status else "") or state.cli_version or "–")
         exit_node = state.status.exit_node if state.status else None
-        self._values["Exit node"].set_text(
-            f"{exit_node.endpoint or 'Exit node'} ({'connected' if exit_node.connected else 'down'})"
-            if exit_node else "None")
+        if exit_node:
+            node_name = exit_node.endpoint or _("Exit node")
+            node_status = _("connected") if exit_node.connected else _("down")
+            exit_node_text = f"{node_name} ({node_status})"
+        else:
+            exit_node_text = _("None")
+        self._values["Exit node"].set_text(exit_node_text)
 
         errors = [e for e in (state.last_error, state.status.error_message if state.status else "") if e]
         if errors:
@@ -173,8 +196,8 @@ class StatusWindow(Gtk.Window):
         peers = state.status.peers if state.status else []
         self.placeholder.set_visible(not peers)
         if not peers:
-            self.placeholder.set_text("Connecting…" if busy else
-                                      "No sites" if state.conn == ConnState.CONNECTED else "Connect to see sites.")
+            self.placeholder.set_text(_("Connecting…") if busy else
+                                      _("No sites") if state.conn == ConnState.CONNECTED else _("Connect to see sites."))
 
     def _fill_peers(self, state: AppState):
         model, it = self.tree.get_selection().get_selected()
@@ -182,10 +205,12 @@ class StatusWindow(Gtk.Window):
 
         self.store.clear()
         for p in (state.status.peers if state.status else []):
-            conn = "Local" if p.is_local else "Relay" if p.is_relay else "Direct"
+            conn = _("Local") if p.is_local else _("Relay") if p.is_relay else _("Direct")
             rtt = f"{p.rtt_ms:.1f} ms" if p.connected and p.rtt_ms > 0 else "–"
-            self.store.append([p.site_id, p.name or f"Site {p.site_id}",
-                               "● Connected" if p.connected else "○ Down", conn,
+            site_name = p.name or _("Site {site_id}").format(site_id=p.site_id)
+            status_text = _("● Connected") if p.connected else _("○ Down")
+            self.store.append([p.site_id, site_name,
+                               status_text, conn,
                                p.endpoint or "–", p.peer_address or "–", rtt,
                                format_relative(p.last_seen), p.rtt_ms])
 

@@ -109,3 +109,20 @@ UI-Fenster bieten `update(state: AppState)` und werden vom Controller bei Änder
 - Keine Secrets loggen (sessionToken, olm secret).
 - Keine `shell=True`-Aufrufe; Argumente als Liste.
 - Code und Kommentare auf Englisch, UI-Texte auf Englisch (wie Windows-Client).
+
+## Ergänzungen
+
+| Datei | Inhalt |
+|---|---|
+| `pangolin_gui/i18n.py` | `_()`/`N_()`, Sprachdateien `locales/<code>.json`, Englisch ist Quellsprache |
+| `pangolin_gui/locales/de.json` | Deutsch (Entwurf: Open WebUI, geprüft von Claude) |
+| `tools/i18n_check.py` | sammelt `_()`/`N_()`-Literale per AST, prüft Vollständigkeit und Platzhalter |
+| `pangolin_gui/clipboard.py` | Zwischenablage: `wl-copy` → `xclip`/`xsel` → GTK |
+| `pangolin_gui/netinfo.py` | IPv4 der Schnittstelle `pangolin` (ioctl), um das eigene Gerät auszublenden |
+
+- Texte nie bei Import übersetzen: Konstanten mit `N_()` markieren, `_()` beim Aufbau aufrufen.
+- `_` nie als Wegwerfvariable verwenden (überdeckt die Übersetzungsfunktion).
+- Sprachwechsel: `app.apply_language()` baut Tray neu und erzeugt offene Fenster neu.
+- Online-Clients: `PangolinApi.list_online_clients()` fragt `/org/{orgId}/clients` und
+  `/org/{orgId}/user-devices` mit `online=true` ab (Recht *listClients*). `StateManager` pollt
+  nur bei bestehender Verbindung, höchstens alle 30 s.

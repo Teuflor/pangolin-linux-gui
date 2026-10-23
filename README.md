@@ -17,7 +17,10 @@ darüber.
 - **Organisationen** wechseln, auch bei laufender Verbindung
 - **Statusfenster** mit Tabelle aller Sites
 - **Log-Viewer** mit Suche, Auto-Refresh und Farbmarkierung
-- **Einstellungen:** DNS-Optionen der CLI, Log-Level, Autostart, automatisch verbinden
+- **Online-Clients:** Bei bestehender Verbindung zeigt das Tray-Menü, welche anderen Geräte
+  der Organisation online sind. Ein Klick kopiert deren Tunnel-IP in die Zwischenablage.
+- **Einstellungen:** Sprache, DNS-Optionen der CLI, Log-Level, Autostart, automatisch verbinden
+- **Mehrsprachig:** Deutsch und Englisch, weitere Sprachen per JSON-Datei
 - **Grafische Passwortabfrage** für die Admin-Rechte beim Verbinden
 
 Noch nicht enthalten: Auswahl eines Exit-Nodes (die CLI kann Exit-Nodes nur interaktiv auflisten).
@@ -33,6 +36,7 @@ Die GUI ist reines Python ohne pip-Pakete. Sie braucht nur Systempakete:
 | GTK 3 | `gtk3` | `gir1.2-gtk-3.0` |
 | Tray-Icon (AppIndicator) | `libayatana-appindicator` | `gir1.2-ayatanaappindicator3-0.1` |
 | Admin-Rechte beim Verbinden | `sudo` | (vorinstalliert) |
+| IP in Zwischenablage (Wayland / X11) | `wl-clipboard`, `xclip` | `wl-clipboard`, `xclip` |
 | Pangolin-CLI | AUR `pangolin-bin` oder `get-cli.sh` | `get-cli.sh` |
 | Tests (optional) | `python-pytest` | `python3-pytest` |
 
@@ -83,7 +87,7 @@ einen Eintrag „Pangolin“ im Anwendungsmenü an. Ohne `--deps` zeigt das Skri
 Von Hand geht es so:
 
 ```bash
-sudo pacman -S --needed python python-gobject gtk3 libayatana-appindicator sudo
+sudo pacman -S --needed python python-gobject gtk3 libayatana-appindicator sudo wl-clipboard xclip
 ```
 
 ### Arch-spezifische Hinweise
@@ -151,6 +155,64 @@ geklonten Ordner. Nach `git pull` ist die neue Version sofort aktiv.
 
 Ein zweiter Aufruf startet keine zweite Instanz, sondern holt das Statusfenster nach vorne.
 
+## Sprache
+
+Unter *Einstellungen… → Sprache* stehen zur Wahl:
+
+- **Systemstandard:** folgt der Desktop-Sprache (`LANGUAGE`/`LANG`, z. B. `de_DE.UTF-8` → Deutsch)
+- **English**
+- **Deutsch**
+
+Die Umstellung wirkt sofort: Tray-Menü und offene Fenster werden in der neuen Sprache neu
+aufgebaut. Auch der Passwortdialog für `sudo` folgt der Einstellung.
+
+### Weitere Sprache hinzufügen
+
+Jede Sprache ist eine Datei `pangolin_gui/locales/<code>.json`, z. B. `fr.json`:
+
+```json
+{
+  "name": "Français",
+  "strings": {
+    "Connect": "Se connecter",
+    "Version {version}": "Version {version}"
+  }
+}
+```
+
+Eine Vorlage mit allen Texten erzeugt das Prüfwerkzeug:
+
+```bash
+echo '{"name": "Français", "strings": {}}' > pangolin_gui/locales/fr.json
+python3 tools/i18n_check.py --update   # trägt alle Texte (leer) in jede Sprachdatei ein
+python3 tools/i18n_check.py            # zeigt fehlende Übersetzungen und Platzhalterfehler
+```
+
+Platzhalter wie `{version}` oder `{ip}` müssen in der Übersetzung erhalten bleiben. Fehlende
+Einträge erscheinen auf Englisch. Die neue Sprache taucht automatisch in den Einstellungen auf.
+
+## Online-Clients
+
+Bei bestehender Verbindung gibt es im Tray das Untermenü **Online-Clients (n)**. Es listet die
+anderen Geräte der aktuellen Organisation, die gerade online sind, jeweils mit Name und Tunnel-IP
+(z. B. `laptop-anna · 100.90.128.7`). Bei Benutzergeräten zeigt der Tooltip den Besitzer.
+
+- **Klick auf einen Eintrag** kopiert die IP in die Zwischenablage, mit Bestätigung als
+  Benachrichtigung.
+- **Aktualisieren** lädt die Liste sofort neu; sonst wird sie alle 30 Sekunden abgefragt, und nur
+  solange eine Verbindung besteht.
+- Das eigene Gerät wird anhand der IP der Schnittstelle `pangolin` ausgeblendet.
+
+**Berechtigung:** Die Liste kommt aus der Pangolin-API (`/org/{orgId}/clients` und
+`/org/{orgId}/user-devices`). Beide verlangen die Berechtigung *listClients*, die in Pangolin
+standardmäßig Admins haben. Ohne diese Berechtigung zeigt das Menü
+„Keine Berechtigung, Clients aufzulisten“. Ein Admin kann der eigenen Rolle das Recht geben.
+
+**Zwischenablage:** Eine Tray-App hat beim Menüklick keinen Fokus. Unter Wayland setzen viele
+Compositors die Zwischenablage dann nicht per GTK. Deshalb nutzt die App `wl-copy`
+(Paket `wl-clipboard`) bzw. unter X11 `xclip`, wenn vorhanden; `install.sh --deps` installiert
+beide.
+
 ## Testanleitung für den ersten Lauf
 
 1. `./bin/pangolin-gui --debug` im Terminal starten. Fehler erscheinen dann dort.
@@ -199,7 +261,11 @@ pangolin_gui/
   api.py                    REST-API (Organisationen)
   accounts.py               Konten und Konfiguration der CLI lesen
   tray.py                   Tray-Icon und Menü
+  i18n.py                   Übersetzungen (_() und N_())
+  locales/de.json           Deutsche Texte
+  clipboard.py, netinfo.py  Zwischenablage, eigene Tunnel-IP
   windows/                  Status, Logs, Einstellungen, Login
+tools/i18n_check.py         Texte sammeln, Sprachdateien prüfen
 tests/                      pytest
 deps/arch.txt               Paketliste Arch
 deps/debian.txt             Paketliste Debian/Ubuntu
@@ -225,6 +291,9 @@ Die Tests brauchen weder GTK noch die Pangolin-CLI noch einen Server.
 | *Connect*: „Authentication failed or was cancelled“ | Passwort falsch oder Benutzer darf kein `sudo` |
 | *Connect* hängt bei *Registering…* | `pangolin logs client -n 100` prüfen; Server erreichbar? |
 | Organisationen bleiben leer | Session abgelaufen: Tray → *Account* → *Add Account…* |
+| Online-Clients: „Keine Berechtigung …“ | Rolle hat kein *listClients*, siehe Abschnitt Online-Clients |
+| IP wird nicht kopiert | `wl-clipboard` (Wayland) bzw. `xclip` (X11) installieren |
+| Sprache wechselt nicht | *Speichern* in den Einstellungen klicken; bei „Systemstandard“ `echo $LANG` prüfen |
 | „No permission to access /var/run/olm.sock“ | Socket gehört root; bitte melden, mit `ls -l /var/run/olm.sock` |
 
 ## Lizenz und Marken

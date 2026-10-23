@@ -8,6 +8,7 @@ from gi.repository import Gdk, GLib, Gtk
 
 from typing import Any, Optional
 from .. import cli
+from pangolin_gui.i18n import _
 
 
 class LoginDialog(Gtk.Dialog):
@@ -15,7 +16,7 @@ class LoginDialog(Gtk.Dialog):
 
     def __init__(self, parent: Optional[Gtk.Window] = None, controller: Any = None):
         super().__init__(
-            title="Log in to Pangolin",
+            title=_("Log in to Pangolin"),
             transient_for=parent,
             flags=Gtk.DialogFlags.MODAL | Gtk.DialogFlags.DESTROY_WITH_PARENT,
         )
@@ -41,9 +42,9 @@ class LoginDialog(Gtk.Dialog):
         content_area.pack_start(self.stack, True, True, 0)
 
         # Setup action buttons
-        self._cancel_btn = self.add_button("Cancel", Gtk.ResponseType.CANCEL)
+        self._cancel_btn = self.add_button(_("Cancel"), Gtk.ResponseType.CANCEL)
 
-        self._action_btn = Gtk.Button(label="Next")
+        self._action_btn = Gtk.Button(label=_("Next"))
         self._action_btn.get_style_context().add_class("suggested-action")
         self._action_btn.connect("clicked", self._on_action_clicked)
         self.get_action_area().pack_end(self._action_btn, False, False, 0)
@@ -62,15 +63,15 @@ class LoginDialog(Gtk.Dialog):
         box.set_border_width(18)
 
         heading = Gtk.Label()
-        heading.set_markup("<b>Select your Pangolin hosting option</b>")
+        heading.set_markup(f"<b>{GLib.markup_escape_text(_('Select your Pangolin hosting option'))}</b>")
         heading.set_xalign(0.0)
         box.pack_start(heading, False, False, 0)
 
         self.radio_cloud = Gtk.RadioButton.new_with_label(
-            None, "Pangolin Cloud (app.pangolin.net)"
+            None, _("Pangolin Cloud (app.pangolin.net)")
         )
         self.radio_self = Gtk.RadioButton.new_with_label_from_widget(
-            self.radio_cloud, "Self-hosted or Dedicated instance"
+            self.radio_cloud, _("Self-hosted or Dedicated instance")
         )
         box.pack_start(self.radio_cloud, False, False, 0)
         box.pack_start(self.radio_self, False, False, 0)
@@ -104,25 +105,25 @@ class LoginDialog(Gtk.Dialog):
         box = Gtk.Box(orientation=Gtk.Orientation.VERTICAL, spacing=14)
         box.set_border_width(18)
 
-        desc = Gtk.Label(label="First copy your one-time code:")
+        desc = Gtk.Label(label=_("First copy your one-time code:"))
         desc.set_xalign(0.5)
         box.pack_start(desc, False, False, 0)
 
         self.code_label = Gtk.Label()
         self.code_label.set_selectable(True)
         self.code_label.set_markup(
-            '<span size="xx-large" weight="bold" font_family="monospace">Generating…</span>'
+            f'<span size="xx-large" weight="bold" font_family="monospace">{GLib.markup_escape_text(_("Generating…"))}</span>'
         )
         box.pack_start(self.code_label, False, False, 0)
 
         btn_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=12)
         btn_box.set_halign(Gtk.Align.CENTER)
 
-        self.copy_btn = Gtk.Button(label="Copy code")
+        self.copy_btn = Gtk.Button(label=_("Copy code"))
         self.copy_btn.connect("clicked", self._on_copy_clicked)
         btn_box.pack_start(self.copy_btn, False, False, 0)
 
-        self.browser_btn = Gtk.Button(label="Open browser")
+        self.browser_btn = Gtk.Button(label=_("Open browser"))
         self.browser_btn.connect("clicked", self._on_browser_clicked)
         btn_box.pack_start(self.browser_btn, False, False, 0)
 
@@ -131,7 +132,7 @@ class LoginDialog(Gtk.Dialog):
         spinner_box = Gtk.Box(orientation=Gtk.Orientation.HORIZONTAL, spacing=8)
         spinner_box.set_halign(Gtk.Align.CENTER)
         self.spinner = Gtk.Spinner()
-        self.spinner_label = Gtk.Label(label="Waiting for confirmation…")
+        self.spinner_label = Gtk.Label(label=_("Waiting for confirmation…"))
         spinner_box.pack_start(self.spinner, False, False, 0)
         spinner_box.pack_start(self.spinner_label, False, False, 0)
 
@@ -170,7 +171,7 @@ class LoginDialog(Gtk.Dialog):
             raw = self.host_entry.get_text().strip()
             if not raw:
                 self.host_error_label.set_markup(
-                    '<span color="#e74c3c" size="small">Please enter a host URL.</span>'
+                    f'<span color="#e74c3c" size="small">{GLib.markup_escape_text(_("Please enter a host URL."))}</span>'
                 )
                 self.host_error_label.show()
                 self.host_entry.grab_focus()
@@ -188,7 +189,7 @@ class LoginDialog(Gtk.Dialog):
         self.stack.set_visible_child_name("page_code")
         self._action_btn.hide()
         self.spinner.start()
-        self.spinner_label.set_text("Waiting for confirmation…")
+        self.spinner_label.set_text(_("Waiting for confirmation…"))
 
         self._session = cli.LoginSession(
             host=host,
@@ -242,17 +243,17 @@ class LoginDialog(Gtk.Dialog):
 
         if ok:
             self.result_title.set_markup(
-                '<span size="x-large" weight="bold" color="#2ecc71">Login Successful</span>'
+                f'<span size="x-large" weight="bold" color="#2ecc71">{GLib.markup_escape_text(_("Login Successful"))}</span>'
             )
-            self.result_msg.set_text(message or "Device authorized successfully.")
+            self.result_msg.set_text(message or _("Device authorized successfully."))
         else:
             self.result_title.set_markup(
-                '<span size="x-large" weight="bold" color="#e74c3c">Login Failed</span>'
+                f'<span size="x-large" weight="bold" color="#e74c3c">{GLib.markup_escape_text(_("Login Failed"))}</span>'
             )
-            self.result_msg.set_text(message or "Authentication was not completed.")
+            self.result_msg.set_text(message or _("Authentication was not completed."))
 
         self._cancel_btn.hide()
-        self._action_btn.set_label("Close")
+        self._action_btn.set_label(_("Close"))
         self._action_btn.show()
 
         if self.controller and hasattr(self.controller, "on_login_finished"):

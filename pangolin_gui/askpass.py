@@ -8,30 +8,36 @@ from __future__ import annotations
 
 import sys
 
+from pangolin_gui.i18n import _
+
 
 def run(argv: list[str]) -> int:
     import gi
 
     gi.require_version("Gtk", "3.0")
-    from gi.repository import Gtk
+    from gi.repository import GLib, Gtk
 
-    prompt = argv[1] if len(argv) > 1 else "Password:"
+    # Separate process (started by sudo), so load the language setting here too.
+    from pangolin_gui import i18n, settings
+    i18n.set_language(settings.GuiSettings.load().language)
+
+    prompt = argv[1] if len(argv) > 1 else _("Password:")
 
     dialog = Gtk.Dialog(title="Pangolin", modal=True)
     dialog.set_icon_name("network-vpn")
     dialog.set_keep_above(True)
     dialog.set_position(Gtk.WindowPosition.CENTER)
-    dialog.add_buttons("Cancel", Gtk.ResponseType.CANCEL, "Authenticate", Gtk.ResponseType.OK)
+    dialog.add_buttons(_("Cancel"), Gtk.ResponseType.CANCEL, _("Authenticate"), Gtk.ResponseType.OK)
     dialog.set_default_response(Gtk.ResponseType.OK)
 
     box = dialog.get_content_area()
     box.set_border_width(12)
     box.set_spacing(8)
     title = Gtk.Label(xalign=0)
-    title.set_markup("<b>Administrator rights required</b>")
+    title.set_markup(f"<b>{GLib.markup_escape_text(_('Administrator rights required'))}</b>")
     box.add(title)
     info = Gtk.Label(
-        label="Pangolin needs administrator rights to create the network tunnel.",
+        label=_("Pangolin needs administrator rights to create the network tunnel."),
         xalign=0, wrap=True, max_width_chars=48)
     box.add(info)
     hint = Gtk.Label(label=prompt.strip(), xalign=0)

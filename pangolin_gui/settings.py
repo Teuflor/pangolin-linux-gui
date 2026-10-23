@@ -23,6 +23,7 @@ def autostart_path() -> Path:
 @dataclass
 class GuiSettings:
     connect_on_start: bool = False
+    language: str = "system"  # "system" or a code from i18n.available_languages()
 
     @classmethod
     def load(cls) -> "GuiSettings":

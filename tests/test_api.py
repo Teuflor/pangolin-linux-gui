@@ -66,14 +66,15 @@ def test_success_false_raises(monkeypatch, account):
     assert exc.value.auth_expired is False
 
 
-@pytest.mark.parametrize("code", [401, 403])
-def test_auth_expired(monkeypatch, account, code):
+@pytest.mark.parametrize("code,expired,forbidden", [(401, True, False), (403, False, True)])
+def test_auth_expired(monkeypatch, account, code, expired, forbidden):
     err = urllib.error.HTTPError("https://x", code, "nope", {},
                                  BytesIO(json.dumps({"success": False, "message": "Unauthorized"}).encode()))
     fake_urlopen(monkeypatch, error=err)
     with pytest.raises(ApiError) as exc:
         PangolinApi(account).list_orgs()
-    assert exc.value.auth_expired is True
+    assert exc.value.auth_expired is expired
+    assert exc.value.forbidden is forbidden
     assert "secrettoken" not in str(exc.value)
 
 
