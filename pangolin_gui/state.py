@@ -50,7 +50,7 @@ class StateManager:
         self._accounts_mtime: Optional[float] = -1.0
         self._orgs_for: Optional[tuple[str, str]] = None
         self._orgs_dirty = True
-        self._clients_at = 0.0
+        self._clients_at = float("-inf")  # "never", independent of system uptime
         self._clients_key: Optional[tuple[str, str, str]] = None
         self._thread: Optional[threading.Thread] = None
 
@@ -73,7 +73,7 @@ class StateManager:
         if reload_orgs:
             self._orgs_dirty = True
         if reload_clients:
-            self._clients_at = 0.0
+            self._clients_at = float("-inf")
         if reload_cli:
             self._refresh_cli()
         self._wake.set()

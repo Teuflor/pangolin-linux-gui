@@ -189,3 +189,17 @@ def test_clipboard_prefers_wl_copy(tmp_path, monkeypatch):
 def test_interface_ipv4_missing_interface():
     assert netinfo.interface_ipv4("nonexistent0") == ""
     assert netinfo.interface_ipv4("lo") == "127.0.0.1"
+
+
+def test_manual_refresh_right_after_boot(manager, monkeypatch):
+    """Regression: refresh was ignored while system uptime (monotonic clock) < 30 s."""
+    mgr, olm, seen, calls, _ = manager
+    clock = [5.0]
+    monkeypatch.setattr(state_mod.time, "monotonic", lambda: clock[0])
+    mgr._poll_once()
+    mgr.refresh_now(reload_clients=True)
+    mgr._poll_once()
+    assert calls == ["org1", "org1"]
+    clock[0] += 31
+    mgr._poll_once()
+    assert len(calls) == 3
