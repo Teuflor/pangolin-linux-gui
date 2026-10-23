@@ -120,6 +120,8 @@ class StateManager:
             status = self._olm.get_status() if self._olm.is_running() else None
         except OlmError as exc:
             log.debug("olm status unavailable: %s", exc)
+        if (status is None) != (self._state.status is None):
+            log.info("tunnel daemon %s", "not running" if status is None else "running")
 
         self._reload_accounts()
         self._reload_orgs()
@@ -153,6 +155,8 @@ class StateManager:
             return
         self._accounts_mtime = mtime
         accs, active = accounts.load_accounts(path)
+        log.info("accounts loaded from %s: %d, active=%s", path, len(accs),
+                 active.display_name if active else "none")
         with self._lock:
             self._state.accounts = accs
             self._state.active_account = active
@@ -178,6 +182,7 @@ class StateManager:
                 with self._lock:
                     self._state.last_error = _("Session expired. Please log in again.")
             return
+        log.info("organizations loaded: %d", len(orgs))
         with self._lock:
             self._state.orgs = orgs
         self._orgs_for = (active.user_id, active.host)
@@ -204,6 +209,7 @@ class StateManager:
             clients, error = [], ("forbidden" if exc.forbidden else str(exc))
             log.info("could not list clients: %s", exc)
         own_ip = netinfo.interface_ipv4()
+        log.debug("online clients: %d (own tunnel ip %s)", len(clients), own_ip or "-")
         clients = [c for c in clients if c.address != own_ip]
         with self._lock:
             self._state.clients, self._state.clients_error = clients, error

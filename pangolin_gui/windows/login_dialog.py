@@ -10,11 +10,21 @@ from typing import Any, Optional
 from .. import cli
 from pangolin_gui.i18n import _
 
+CLOUD_HOST = "https://app.pangolin.net"
+
+
+def normalize_host(raw: str) -> str:
+    raw = (raw or "").strip().rstrip("/")
+    if raw and not raw.startswith(("http://", "https://")):
+        raw = "https://" + raw
+    return raw
+
 
 class LoginDialog(Gtk.Dialog):
     """Multi-page dialog guiding the user through device-code authentication."""
 
-    def __init__(self, parent: Optional[Gtk.Window] = None, controller: Any = None):
+    def __init__(self, parent: Optional[Gtk.Window] = None, controller: Any = None,
+                 host: Optional[str] = None, start: bool = False):
         super().__init__(
             title=_("Log in to Pangolin"),
             transient_for=parent,
@@ -25,6 +35,7 @@ class LoginDialog(Gtk.Dialog):
         self._session: Optional[cli.LoginSession] = None
         self._code: str = ""
         self._url: str = ""
+        self._closed = False
 
         self.set_default_size(440, 260)
         self.set_resizable(False)
@@ -56,6 +67,26 @@ class LoginDialog(Gtk.Dialog):
         self.show_all()
         # Keep inline error label hidden until needed
         self.host_error_label.hide()
+        self.connect("destroy", self._on_destroy)
+
+        if host:
+            self.prefill_host(host)
+            if start:
+                self._start_login(normalize_host(host))
+
+    def prefill_host(self, host: str) -> None:
+        """Preselect the known server: Cloud radio, or self-hosted with the URL filled in."""
+        host = normalize_host(host)
+        if host.rstrip("/") == CLOUD_HOST:
+            self.radio_cloud.set_active(True)
+        else:
+            self.radio_self.set_active(True)
+            self.host_entry.set_text(host)
+            self.host_entry.set_sensitive(True)
+
+    def _on_destroy(self, *_args) -> None:
+        self._closed = True
+        self._cancel_session()
 
     def _init_page1_host(self) -> None:
         """Page 1: Radio buttons for hosting option and host entry."""
@@ -166,7 +197,7 @@ class LoginDialog(Gtk.Dialog):
 
     def _submit_host(self) -> None:
         if self.radio_cloud.get_active():
-            host = "https://app.pangolin.net"
+            host = CLOUD_HOST
         else:
             raw = self.host_entry.get_text().strip()
             if not raw:
@@ -177,10 +208,7 @@ class LoginDialog(Gtk.Dialog):
                 self.host_entry.grab_focus()
                 return
 
-            # Prepend https:// if no scheme provided
-            if not (raw.startswith("http://") or raw.startswith("https://")):
-                raw = "https://" + raw
-            host = raw
+            host = normalize_host(raw)
 
         self.host_error_label.hide()
         self._start_login(host)
@@ -225,6 +253,8 @@ class LoginDialog(Gtk.Dialog):
         GLib.idle_add(self._apply_code, code, url)
 
     def _apply_code(self, code: str, url: str) -> bool:
+        if self._closed:
+            return False
         self._code = code
         self._url = url
         escaped = GLib.markup_escape_text(code)
@@ -237,6 +267,8 @@ class LoginDialog(Gtk.Dialog):
         GLib.idle_add(self._apply_done, ok, message)
 
     def _apply_done(self, ok: bool, message: str) -> bool:
+        if self._closed:
+            return False
         self.spinner.stop()
         self._session = None
         self.stack.set_visible_child_name("page_result")

@@ -126,3 +126,18 @@ UI-Fenster bieten `update(state: AppState)` und werden vom Controller bei Änder
 - Online-Clients: `PangolinApi.list_online_clients()` fragt `/org/{orgId}/clients` und
   `/org/{orgId}/user-devices` mit `online=true` ab (Recht *listClients*). `StateManager` pollt
   nur bei bestehender Verbindung, höchstens alle 30 s.
+
+## Tray (nach Praxistest 1)
+
+| Datei | Inhalt |
+|---|---|
+| `pangolin_gui/menu_model.py` | `MenuNode` – Menü ohne GTK; `signature()` für Neuaufbau nur bei Änderung |
+| `pangolin_gui/tray.py` | `build_menu_model(state, controller)` (testbar ohne GTK), `choose_backend()`, `TrayIcon` |
+| `pangolin_gui/sni.py` | StatusNotifierItem + `com.canonical.dbusmenu` über Gio (Entwurf: Antigravity, geprüft) |
+| `pangolin_gui/tray_gtk.py` | Fallback AppIndicator / Gtk.StatusIcon |
+
+- Backend: SNI, wenn `org.kde.StatusNotifierWatcher` läuft, sonst GTK; `PANGOLIN_TRAY=sni|gtk` erzwingt.
+- SNI: Activate = Statusfenster, SecondaryActivate = Verbinden/Trennen, Menü per dbusmenu.
+  Anmeldung beim Watcher erst nach `NameAcquired` und erneut, wenn der Watcher neu startet.
+- Nach jedem Klick baut `TrayIcon` das Menü aus dem echten Zustand neu (kein hängender Haken).
+- Kein Menüeintrag als Checkbox für Verbinden/Trennen.

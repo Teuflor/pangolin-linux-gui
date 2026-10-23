@@ -9,8 +9,10 @@ darüber.
 
 ## Funktionen
 
-- **Tray-Icon:** orange bei Verbindung, grau ohne
-- **Verbinden/Trennen** aus dem Menü oder dem Statusfenster
+- **Tray-Icon:** orange bei Verbindung, grau ohne. **Linksklick** öffnet das Statusfenster,
+  **Rechtsklick** das Menü, **Mittelklick** verbindet bzw. trennt
+- **Verbinden/Trennen** aus dem Menü oder dem Statusfenster; ist man noch nicht angemeldet,
+  startet der Login und danach direkt die Verbindung
 - **Sites-Menü** wie unter Windows: Status, Verbindungsart (Direct/Relay/Local), Endpoint,
   letzter Kontakt und Latenz je Site
 - **Konten:** wechseln, hinzufügen (Login per Einmal-Code im Browser), abmelden
@@ -155,6 +157,33 @@ geklonten Ordner. Nach `git pull` ist die neue Version sofort aktiv.
 
 Ein zweiter Aufruf startet keine zweite Instanz, sondern holt das Statusfenster nach vorne.
 
+### Tray-Icon und Klicks
+
+Die App meldet ihr Icon selbst per D-Bus als *StatusNotifierItem* an (KDE Plasma, GNOME mit
+AppIndicator-Erweiterung, XFCE, Waybar):
+
+| Klick | Wirkung |
+|---|---|
+| Links | Statusfenster öffnen bzw. nach vorne holen |
+| Rechts | Menü |
+| Mitte | Verbinden / Trennen |
+
+Läuft kein StatusNotifier-Dienst, nutzt die App AppIndicator. Dort öffnen Links- und
+Rechtsklick das Menü; das Statusfenster erreicht man über *Open Status…* oder den Mittelklick.
+Das Backend lässt sich erzwingen:
+
+```bash
+PANGOLIN_TRAY=gtk ./bin/pangolin-gui   # AppIndicator statt eigenem D-Bus-Icon
+PANGOLIN_TRAY=sni ./bin/pangolin-gui   # eigenes D-Bus-Icon erzwingen
+```
+
+### Logs
+
+Die GUI schreibt nach stderr: Start (Sprache, CLI-Pfad, Tray-Backend), geladene Konten und
+Organisationen, Verbindungswechsel, Login. Mit `--debug` zusätzlich jeden CLI-Aufruf samt
+Exit-Code und letzter Ausgabe sowie jeden API-Aufruf mit HTTP-Status. Passwörter, Sitzungs-Token
+und Login-Codes landen nie im Log.
+
 ## Sprache
 
 Unter *Einstellungen… → Sprache* stehen zur Wahl:
@@ -260,7 +289,10 @@ pangolin_gui/
   olm_socket.py             Client für den Tunnel-Dienst (Unix-Socket)
   api.py                    REST-API (Organisationen)
   accounts.py               Konten und Konfiguration der CLI lesen
-  tray.py                   Tray-Icon und Menü
+  tray.py                   Menüinhalt (build_menu_model) und Wahl des Tray-Backends
+  menu_model.py             Toolkit-neutrales Menümodell
+  sni.py                    Tray-Icon per D-Bus (StatusNotifierItem + dbusmenu)
+  tray_gtk.py               Fallback: AppIndicator / Gtk.StatusIcon
   i18n.py                   Übersetzungen (_() und N_())
   locales/de.json           Deutsche Texte
   clipboard.py, netinfo.py  Zwischenablage, eigene Tunnel-IP
@@ -288,6 +320,7 @@ Die Tests brauchen weder GTK noch die Pangolin-CLI noch einen Server.
 |---|---|
 | `Namespace Gtk not available` | `gtk3` + `python-gobject` (Arch) bzw. `gir1.2-gtk-3.0` (Debian) fehlen |
 | Kein Tray-Icon, nur Statusfenster | Desktop hat keinen Tray, siehe Hinweise oben |
+| Tray-Icon fehlt oder reagiert falsch | Log-Zeile `tray backend: …` prüfen; testweise `PANGOLIN_TRAY=gtk` |
 | *Connect*: „Authentication failed or was cancelled“ | Passwort falsch oder Benutzer darf kein `sudo` |
 | *Connect* hängt bei *Registering…* | `pangolin logs client -n 100` prüfen; Server erreichbar? |
 | Organisationen bleiben leer | Session abgelaufen: Tray → *Account* → *Add Account…* |

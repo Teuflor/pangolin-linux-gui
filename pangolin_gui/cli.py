@@ -5,6 +5,7 @@ and pty-based interactive authentication.
 """
 from __future__ import annotations
 
+import logging
 import os
 import re
 import select
@@ -17,6 +18,8 @@ from pathlib import Path
 from typing import Callable
 
 from pangolin_gui.i18n import _
+
+log = logging.getLogger(__name__)
 
 # Regex matching ANSI escape sequences (colors, cursor movement, OSC, etc.)
 ANSI_ESCAPE_RE = re.compile(
@@ -42,6 +45,11 @@ def parse_device_code(text: str) -> str | None:
     """Extract the one-time code from Pangolin CLI output, if present."""
     match = DEVICE_CODE_RE.search(strip_ansi(text))
     return match.group(1) if match else None
+
+
+def _tail(text: str, lines: int = 3) -> str:
+    rows = [r.strip() for r in (text or "").splitlines() if r.strip()]
+    return " | ".join(rows[-lines:])
 
 
 class CliError(Exception):
@@ -94,6 +102,8 @@ def _run_cli(
         raise CliError(_("pangolin CLI binary not found"))
 
     full_cmd = [cli_path] + args
+    log.debug("run: %s", " ".join(full_cmd))
+    started = time.monotonic()
     try:
         proc = subprocess.run(
             full_cmd,
@@ -116,6 +126,8 @@ def _run_cli(
 
     stdout = strip_ansi(proc.stdout)
     stderr = strip_ansi(proc.stderr)
+    log.debug("exit %s after %.1fs: %s", proc.returncode, time.monotonic() - started,
+              _tail(stderr or stdout))
 
     if proc.returncode != 0:
         err_output = stderr.strip() or stdout.strip()
@@ -142,6 +154,7 @@ def up(org_id: str | None = None, askpass: str | None = None) -> None:
     Runs with no controlling terminal and SUDO_ASKPASS if provided.
     """
     args = ["up", "client", "--silent"]
+    log.info("connecting (org=%s, askpass=%s)", org_id or "default", bool(askpass))
     if org_id:
         args.extend(["--org", org_id])
 
@@ -236,6 +249,23 @@ class LoginSession:
             except Exception:
                 pass
 
+    def _reap(self) -> int:
+        """Wait for the child so it never lingers as a zombie, killing it if needed."""
+        if self._proc is None:
+            return -1
+        try:
+            return self._proc.wait(timeout=10)  # the pty may report EOF before exit
+        except subprocess.TimeoutExpired:
+            self.cancel()
+            try:
+                return self._proc.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                try:
+                    os.killpg(self._proc.pid, signal.SIGKILL)
+                except OSError:
+                    pass
+                return self._proc.wait()
+
     def _finish(self, ok: bool, message: str) -> None:
         with self._lock:
             if self._done_called:
@@ -259,6 +289,7 @@ class LoginSession:
                 clean_host = "https://" + clean_host
 
         cmd = [cli_path, "auth", "login"]
+        log.info("login started for %s", clean_host or "(prompt)")
         if clean_host:
             cmd.append(clean_host)
 
@@ -378,16 +409,12 @@ class LoginSession:
                 pass
             self._master_fd = None
 
+        exit_code = self._reap()
+        log.info("login process finished: exit=%s cancelled=%s", exit_code, self._cancelled)
         if self._cancelled:
             self._finish(False, _("Login cancelled"))
             return
 
-        # The pty can report EOF slightly before the child is reaped.
-        try:
-            exit_code = self._proc.wait(timeout=10) if self._proc else -1
-        except subprocess.TimeoutExpired:
-            self.cancel()
-            exit_code = -1
         full_output = strip_ansi("".join(output_chunks)).strip()
 
         if exit_code == 0:

@@ -2,12 +2,15 @@
 from __future__ import annotations
 
 import json
+import logging
 import ssl
 import urllib.error
 import urllib.request
 from urllib.parse import quote, urlencode
 
 from pangolin_gui.models import Account, Org, OrgClient
+
+log = logging.getLogger(__name__)
 
 
 class ApiError(Exception):
@@ -60,6 +63,7 @@ class PangolinApi:
         if not isinstance(body, dict):
             body = {}
 
+        log.debug("%s %s -> HTTP %s", method, path.split("?")[0], status)
         if status >= 400 or not body.get("success", False):
             msg = body.get("message") or (body.get("error") if isinstance(body.get("error"), str) else "")
             raise ApiError(msg or f"HTTP {status}", auth_expired=status == 401, forbidden=status == 403)

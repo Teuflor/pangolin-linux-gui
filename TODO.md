@@ -4,10 +4,22 @@ Ergebnisse des ersten echten Tests: CachyOS, KDE Plasma 6.8.1 (Wayland), GUI-Sta
 Pangolin-CLI 0.19.0, selbst gehosteter Pangolin-Server 1.25. Mit der Korrektur aus Punkt 0
 funktionieren Login und Verbinden; der Rechner erscheint im Dashboard online.
 
+## Umsetzungsstand (nach Praxistest 1)
+
+| Punkt | Stand | Umsetzung |
+|---|---|---|
+| 0 | erledigt, Test auf echtem System offen | `activeuserid` gelesen; genau ein Konto ohne aktives → wird per `pangolin select account` gewählt und verbunden; Login-Dialog füllt die bekannte Server-URL vor; ist die Sitzung abgelaufen, startet der Login direkt für diesen Server, danach wird verbunden |
+| 1 | erledigt, Test auf echtem System offen | eigenes StatusNotifierItem per D-Bus (`sni.py`): Linksklick = Statusfenster, Rechtsklick = Menü, Mittelklick = Verbinden/Trennen; AppIndicator bleibt Fallback (`PANGOLIN_TRAY=gtk`) |
+| 2 | erledigt | „Connect“/„Disconnect“ ist ein normaler Eintrag statt Checkbox; nach jedem Klick wird das Menü aus dem echten Zustand neu gebaut; nach einem über „Connect“ gestarteten Login wird direkt verbunden |
+| 3 | erledigt | „Open Status…“ steht immer oben im Menü; Statusfenster zeigt ohne Verbindung einen Hinweis |
+| 4 | erledigt | kein Handlungsbedarf |
+| 5 | erledigt | Ursache: abgebrochener Login wurde nicht mit `wait()` abgeholt; jetzt immer (Test mit Fake-CLI) |
+| 6 | erledigt | Logzeilen für Start, Tray-Backend, Konten, Organisationen, Verbindungswechsel, jeden CLI-Aufruf (Befehl, Exit-Code, Ausgabe) und API-Aufrufe |
+| 7 | war vorhanden | Einstellungen → „Lokale Routen bevorzugen, wenn verfügbar“ |
+
 ## 0. Aktives Konto wird nicht erkannt → „Connect“ startet immer wieder den Login
 
-**Status:** Schlüssel-Korrektur und Tests sind erledigt (Branch `fix/aktives-konto`). Offen sind
-die letzten beiden Punkte unter „Soll“.
+**Status:** erledigt (siehe Umsetzungsstand).
 
 **Ist:** Jeder Klick auf „Connect“ fragt erneut nach der Server-URL und verlangt einen neuen
 Login im Browser. `pangolin up` wird nie aufgerufen, daher entsteht kein Tunnel und kein Client
@@ -23,8 +35,8 @@ Nachgeprüft mit der echten Datei: 1 Konto geladen, aktives Konto erkannt: `Fals
 **Soll:**
 - [x] Schlüssel `activeuserid` lesen (zur Sicherheit beide Schreibweisen akzeptieren).
 - [x] Tests mit der Schreibweise der aktuellen CLI.
-- Gibt es genau ein Konto, aber kein aktives, dieses verwenden statt den Login zu starten.
-- Der Login-Dialog sollte die bekannte Server-URL vorausfüllen bzw. gar nicht erst fragen,
+- [x] Gibt es genau ein Konto, aber kein aktives, dieses verwenden statt den Login zu starten.
+- [x] Der Login-Dialog sollte die bekannte Server-URL vorausfüllen bzw. gar nicht erst fragen,
   wenn schon ein Konto für diesen Server existiert.
 
 ## 1. Tray-Klicks: links = Statusfenster, rechts = Menü

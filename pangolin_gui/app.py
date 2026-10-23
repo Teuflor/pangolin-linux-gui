@@ -35,6 +35,7 @@ class PangolinApp(Gtk.Application):
         self.tray = None
         self._windows: dict[str, Gtk.Window] = {}
         self._login_dialog = None
+        self._connect_after_login = False  # login was started by Connect -> connect when done
 
     # -- Gtk.Application ----------------------------------------------------------
     def do_startup(self):
@@ -48,6 +49,8 @@ class PangolinApp(Gtk.Application):
             log.exception("tray icon unavailable; falling back to the status window")
             self.tray = None
             self._start_hidden = False
+        log.info("started: language=%s cli=%s tray=%s", i18n.current_language(),
+                 cli.find_cli() or "missing", getattr(self.tray, "backend_name", "none"))
         self.state_mgr.start()
         if settings.GuiSettings.load().connect_on_start:
             GLib.timeout_add_seconds(3, self._auto_connect)
@@ -66,6 +69,8 @@ class PangolinApp(Gtk.Application):
 
     # -- state --------------------------------------------------------------------
     def _on_state(self, state: AppState):
+        if state.conn != self._state.conn:
+            log.info("connection: %s -> %s", self._state.conn.value, state.conn.value)
         self._state = state
         if self.tray is not None:
             self.tray.update(state)
@@ -79,7 +84,8 @@ class PangolinApp(Gtk.Application):
 
     def _auto_connect(self):
         state = self.get_state()
-        if state.active_account and state.conn == ConnState.DISCONNECTED:
+        if state.accounts and state.conn == ConnState.DISCONNECTED:
+            log.info("auto-connect on start")
             self.connect()
         return False
 
@@ -130,19 +136,43 @@ class PangolinApp(Gtk.Application):
         if not self._require_cli():
             return
         state = self.get_state()
-        if state.active_account is None:
+        account = state.active_account
+        if account is None and len(state.accounts) == 1:
+            # Logged in once, but the CLI has no active account: use the only one.
+            only = state.accounts[0]
+            log.info("connect: no active account, selecting the only account %s", only.display_name)
+            self.state_mgr.set_transition(ConnState.CONNECTING)
+
+            def work():
+                cli.select_account(only.email, only.host)
+                cli.up(org_id=only.org_id or None, askpass=str(ASKPASS))
+            self._run(work, on_error=self._connect_failed)
+            return
+        if account is None:
+            log.info("connect: no account selected -> login")
+            self._connect_after_login = True
             self.add_account()
             return
-        org = state.active_account.org_id or None
+        log.info("connect: account=%s org=%s", account.display_name, account.org_id or "default")
         self.state_mgr.set_transition(ConnState.CONNECTING)
-        self._run(lambda: cli.up(org_id=org, askpass=str(ASKPASS)), on_error=self._connect_failed)
+        self._run(lambda: cli.up(org_id=account.org_id or None, askpass=str(ASKPASS)),
+                  on_error=self._connect_failed)
 
     def _connect_failed(self, message: str):
-        if "incorrect password" in message.lower() or "a password is required" in message.lower():
+        lower = message.lower()
+        if "incorrect password" in lower or "a password is required" in lower:
             message = _("Authentication failed or was cancelled.")
+        elif any(k in lower for k in ("not logged in", "unauthorized", "session expired", "log in again")):
+            # Session gone: log in again on the same server without asking for the URL.
+            log.info("connect failed because the session is gone -> re-login")
+            self.state_mgr.set_error("")
+            self._connect_after_login = True
+            self.add_account(host=self._known_host(), start=True)
+            return
         self._report_error(message)
 
     def disconnect(self):
+        log.info("disconnect")
         self.state_mgr.set_transition(ConnState.DISCONNECTING)
 
         def work():
@@ -159,6 +189,7 @@ class PangolinApp(Gtk.Application):
             return
         if state.conn == ConnState.CONNECTED:
             self.state_mgr.set_transition(ConnState.CONNECTING)
+        log.info("select org %s", org_id)
         self._run(lambda: cli.select_org(org_id),
                   on_success=lambda: self.state_mgr.refresh_now(reload_orgs=False))
 
@@ -168,6 +199,7 @@ class PangolinApp(Gtk.Application):
         if account is None or (state.active_account and state.active_account.user_id == user_id):
             return
         was_connected = state.conn in (ConnState.CONNECTED, ConnState.CONNECTING)
+        log.info("select account %s", account.display_name)
 
         def work():
             if was_connected:
@@ -175,22 +207,51 @@ class PangolinApp(Gtk.Application):
             cli.select_account(account.email, account.host)
         self._run(work, on_success=lambda: self.state_mgr.refresh_now(reload_orgs=True))
 
-    def add_account(self):
+    def _known_host(self) -> str | None:
+        state = self.get_state()
+        account = state.active_account or (state.accounts[0] if state.accounts else None)
+        return account.host if account else None
+
+    def add_account(self, host: str | None = None, start: bool = False):
+        """Open the login dialog. The server URL is prefilled with the known server;
+        with start=True the login begins right away without asking for it."""
         if not self._require_cli():
             return
         if self._login_dialog is not None:
             self._login_dialog.present()
             return
         from pangolin_gui.windows.login_dialog import LoginDialog
-        self._login_dialog = LoginDialog(None, controller=self)
-        self._login_dialog.connect("destroy", lambda *_: setattr(self, "_login_dialog", None))
+        host = host or self._known_host()
+        log.info("login dialog: host=%s start=%s", host or "-", start)
+        self._login_dialog = LoginDialog(None, controller=self, host=host, start=start)
+        self._login_dialog.connect("destroy", self._on_login_dialog_closed)
         self._login_dialog.show_all()
         self._login_dialog.present()
 
+    def _on_login_dialog_closed(self, *_args):
+        self._login_dialog = None
+        if self._connect_after_login:
+            GLib.timeout_add(100, self._drop_pending_connect)
+
+    def _drop_pending_connect(self):
+        # on_login_finished runs first if the login completed; otherwise it was cancelled
+        self._connect_after_login = False
+        return False
+
     def on_login_finished(self, ok: bool):
+        log.info("login finished: ok=%s", ok)
         self.state_mgr.refresh_now(reload_orgs=True)
-        if ok:
-            self.notify("Pangolin", _("Logged in successfully."))
+        connect_now, self._connect_after_login = self._connect_after_login, False
+        if not ok:
+            return
+        self.notify("Pangolin", _("Logged in successfully."))
+        if connect_now:
+            # Give the poller a moment to load the new accounts.json, then connect.
+            GLib.timeout_add(1500, self._connect_once)
+
+    def _connect_once(self):
+        self.connect()
+        return False
 
     def logout(self):
         dialog = Gtk.MessageDialog(message_type=Gtk.MessageType.QUESTION, buttons=Gtk.ButtonsType.OK_CANCEL,

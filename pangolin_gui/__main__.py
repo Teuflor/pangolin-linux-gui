@@ -14,6 +14,8 @@ def main(argv: list[str] | None = None) -> int:
 
     logging.basicConfig(level=logging.DEBUG if args.debug else logging.INFO,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s")
+    if args.debug:
+        logging.getLogger(__name__).debug("debug logging enabled (python %s)", sys.version.split()[0])
 
     from pangolin_gui.app import PangolinApp
     # Gtk.Application parses its own argv; hand it only the program name.

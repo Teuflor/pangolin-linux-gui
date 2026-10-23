@@ -1,54 +1,28 @@
-"""Linux system tray icon and menu for Pangolin GUI.
+"""Tray icon and menu for the Pangolin Linux client.
 
-Mirrors the official Windows client's tray menu (ref/windows-ui/menu.go) as closely
-as GTK3 menus allow, using AyatanaAppIndicator3 with fallbacks to AppIndicator3 and
-Gtk.StatusIcon.
+The menu is described toolkit-independently (menu_model.MenuNode) by
+build_menu_model() and rendered by a backend:
+  - sni.SniTray: own StatusNotifierItem over D-Bus. Left click opens the status
+    window, right click shows the menu, middle click connects/disconnects.
+  - tray_gtk.GtkTrayBackend: AppIndicator (one menu for all clicks) or Gtk.StatusIcon.
+Mirrors the official Windows client's tray menu (ref/windows-ui/menu.go).
 """
 from __future__ import annotations
 
+import logging
+import os
 import pathlib
 from datetime import datetime, timezone
-from typing import Any, Optional, Tuple
+from typing import Any, Callable, Optional, Tuple
 
-from pangolin_gui.i18n import _
+from pangolin_gui.i18n import _, current_language
+from pangolin_gui.menu_model import LABEL, RADIO, MenuNode, separator, walk
 from pangolin_gui.models import AppState, ConnState, OrgClient, Peer
 
-# Guarded imports so pure helpers can be imported and tested without GTK installed
-_GTK_AVAILABLE = False
-_APP_INDICATOR_KIND: Optional[str] = None
-Gtk: Any = None
-GLib: Any = None
-AppIndicator3: Any = None
+log = logging.getLogger(__name__)
 
-try:
-    import gi
-
-    gi.require_version("Gtk", "3.0")
-    from gi.repository import GLib as _GLib, Gtk as _Gtk
-
-    Gtk = _Gtk
-    GLib = _GLib
-    _GTK_AVAILABLE = True
-except (ImportError, ValueError):
-    pass
-
-if _GTK_AVAILABLE:
-    try:
-        gi.require_version("AyatanaAppIndicator3", "0.1")
-        from gi.repository import AyatanaAppIndicator3 as _Indicator
-
-        AppIndicator3 = _Indicator
-        _APP_INDICATOR_KIND = "AyatanaAppIndicator3"
-    except (ImportError, ValueError):
-        try:
-            gi.require_version("AppIndicator3", "0.1")
-            from gi.repository import AppIndicator3 as _Indicator
-
-            AppIndicator3 = _Indicator
-            _APP_INDICATOR_KIND = "AppIndicator3"
-        except (ImportError, ValueError):
-            AppIndicator3 = None
-            _APP_INDICATOR_KIND = "StatusIcon"
+DOCS_URL = "https://docs.pangolin.net"
+INSTALL_URL = "https://docs.pangolin.net/manage/clients/install-client"
 
 
 # ---------------------------------------------------------------------------
@@ -217,402 +191,226 @@ menu_signature = compute_menu_signature
 
 
 # ---------------------------------------------------------------------------
-# TrayIcon Class (GTK3 / AppIndicator)
+# Menu model (toolkit independent)
 # ---------------------------------------------------------------------------
 
+def build_menu_model(state: AppState, controller: Any) -> list[MenuNode]:
+    """The whole tray menu for a state. Mirrors the Windows client (ref/windows-ui/menu.go)."""
+    c = controller
+    nodes: list[MenuNode] = []
+
+    if not state.accounts:
+        nodes.append(MenuNode("login", _("Log In…"), action=c.add_account))
+        nodes.append(MenuNode("open_status", _("Open Status…"), action=c.open_status))
+        nodes.append(separator("sep_top"))
+        nodes.extend(_common_nodes(state, c))
+        return nodes
+
+    nodes.append(MenuNode("status", get_status_label(state), kind=LABEL))
+    busy = state.conn in (ConnState.CONNECTING, ConnState.DISCONNECTING)
+    if state.conn in (ConnState.CONNECTED, ConnState.CONNECTING, ConnState.DISCONNECTING):
+        # A plain item, not a checkbox: its text always says what a click will do.
+        nodes.append(MenuNode("toggle", _("Disconnect"), enabled=state.conn != ConnState.DISCONNECTING,
+                              action=c.disconnect))
+    else:
+        nodes.append(MenuNode("toggle", _("Connect"), enabled=not busy, action=c.connect))
+    nodes.append(MenuNode("open_status", _("Open Status…"), action=c.open_status))
+
+    if state.conn == ConnState.CONNECTED:
+        nodes.append(_sites_node(state))
+        nodes.append(_clients_node(state, c))
+
+    nodes.append(separator("sep_account"))
+    nodes.append(_account_node(state, c))
+    nodes.append(_org_node(state, c))
+    nodes.append(separator("sep_common"))
+    nodes.extend(_common_nodes(state, c))
+    return nodes
+
+
+def _sites_node(state: AppState) -> MenuNode:
+    peers = state.status.peers if state.status else []
+    children: list[MenuNode] = []
+    for p in peers:
+        rtt = f"{p.rtt_ms:.1f} ms" if p.connected and p.rtt_ms > 0 else "—"
+        details = [
+            _("Status: {status}").format(status=_("Connected") if p.connected else _("Disconnected")),
+            _("Connection: {type}").format(type=peer_connection_type(p)),
+            _("Endpoint: {endpoint}").format(endpoint=p.endpoint or "—"),
+            _("Last Seen: {last_seen}").format(last_seen=format_relative_time(p.last_seen) or "—"),
+            _("RTT: {rtt}").format(rtt=rtt),
+        ]
+        children.append(MenuNode(
+            f"site:{p.site_id}", p.name or _("Site {site_id}").format(site_id=p.site_id),
+            icon_name="emblem-ok-symbolic" if p.connected else "",
+            children=[MenuNode(f"site:{p.site_id}:{i}", text, kind=LABEL) for i, text in enumerate(details)]))
+    if not children:
+        children.append(MenuNode("sites:none", _("No sites"), kind=LABEL))
+    return MenuNode("sites", _("Sites"), children=children)
+
+
+def _clients_node(state: AppState, c: Any) -> MenuNode:
+    count = len(state.clients)
+    title = _("Online Clients ({count})").format(count=count) if count else _("Online Clients")
+    children: list[MenuNode] = []
+    if state.clients:
+        children.append(MenuNode("clients:hint", _("Click to copy the IP address"), kind=LABEL))
+        children.append(separator("clients:sep"))
+        for client in state.clients:
+            children.append(MenuNode(
+                f"client:{client.client_id}", client_menu_label(client), tooltip=client.owner,
+                action=lambda ip=client.address, name=client.name: c.copy_client_ip(ip, name)))
+    else:
+        if state.clients_error == "forbidden":
+            text = _("Your role may not list clients")
+        elif state.clients_error:
+            text = _("Could not load clients")
+        else:
+            text = _("No other clients online")
+        children.append(MenuNode("clients:empty", text, kind=LABEL))
+    children.append(separator("clients:sep2"))
+    children.append(MenuNode("clients:refresh", _("Refresh"), action=c.refresh_clients))
+    return MenuNode("clients", title, children=children)
+
+
+def _account_node(state: AppState, c: Any) -> MenuNode:
+    active_uid = state.active_account.user_id if state.active_account else None
+    emails = [a.email for a in state.accounts]
+    children: list[MenuNode] = []
+    for acc in state.accounts:
+        label = acc.display_name
+        if emails.count(acc.email) > 1 and acc.host:
+            label = f"{acc.display_name} ({acc.host})"
+        children.append(MenuNode(f"account:{acc.user_id}", label, kind=RADIO,
+                                 checked=acc.user_id == active_uid,
+                                 action=lambda uid=acc.user_id: c.select_account(uid)))
+    children.append(separator("account:sep"))
+    children.append(MenuNode("account:add", _("Add Account…"), action=c.add_account))
+    children.append(MenuNode("account:logout", _("Log Out"), enabled=active_uid is not None, action=c.logout))
+    return MenuNode("account", _("Account"), children=children)
+
+
+def _org_node(state: AppState, c: Any) -> MenuNode:
+    active_org = (state.status.org_id if state.status and state.status.org_id
+                  else (state.active_account.org_id if state.active_account else ""))
+    children = [MenuNode(f"org:{o.org_id}", o.name, kind=RADIO, checked=o.org_id == active_org,
+                         action=lambda oid=o.org_id: c.select_org(oid))
+                for o in state.orgs]
+    if not children:
+        children.append(MenuNode("org:none", _("No Organizations"), kind=LABEL))
+    return MenuNode("org", _("Organization"), children=children)
+
+
+def _common_nodes(state: AppState, c: Any) -> list[MenuNode]:
+    ver = state.cli_version or (state.status.version if state.status else "")
+    more = [
+        MenuNode("more:docs", _("Documentation"), action=lambda: c.open_url(DOCS_URL)),
+        separator("more:sep"),
+        MenuNode("more:version", _("Version {version}").format(version=ver) if ver else _("Version unknown"),
+                 kind=LABEL),
+    ]
+    if not state.cli_installed:
+        more.append(MenuNode("more:install", _("Install Pangolin CLI…"), action=lambda: c.open_url(INSTALL_URL)))
+    return [
+        MenuNode("preferences", _("Preferences…"), action=c.open_preferences),
+        MenuNode("logs", _("Logs…"), action=c.open_logs),
+        MenuNode("more", _("More"), children=more),
+        separator("sep_quit"),
+        MenuNode("quit", _("Quit Pangolin"), action=c.quit),
+    ]
+
+
+# ---------------------------------------------------------------------------
+# TrayIcon: picks a backend and feeds it the menu model
+# ---------------------------------------------------------------------------
+
+def choose_backend(env: dict[str, str] | None = None) -> str:
+    """"sni" (own StatusNotifierItem: left click = status window) or "gtk" (AppIndicator).
+
+    PANGOLIN_TRAY=sni|gtk forces a backend; otherwise SNI is used when a
+    StatusNotifierWatcher (KDE, GNOME AppIndicator extension, XFCE, waybar, …) is running.
+    """
+    forced = (env if env is not None else os.environ).get("PANGOLIN_TRAY", "").lower()
+    if forced in ("sni", "gtk"):
+        return forced
+    try:
+        from pangolin_gui import sni
+        return "sni" if sni.sni_available() else "gtk"
+    except Exception:  # Gio missing or broken bus
+        log.debug("SNI check failed", exc_info=True)
+        return "gtk"
+
+
 class TrayIcon:
-    """System tray icon and popup menu for Pangolin Linux client."""
+    """Tray icon + menu. Left click opens the status window where the backend allows it."""
 
     def __init__(self, controller: Any, icon_dir: pathlib.Path) -> None:
-        if not _GTK_AVAILABLE:
-            raise RuntimeError("GTK 3 is not available in the current environment")
-
         self.controller = controller
         self.icon_dir = pathlib.Path(icon_dir)
-        self._menu_signature: Optional[tuple] = None
-        self._menu: Optional[Gtk.Menu] = None
-        self._indicator: Any = None
-        self._status_icon: Any = None
-        self._connect_toggle_handler: Optional[int] = None
-
-        initial_icon_name = "network-vpn"
-        gray_file = self.icon_dir / "pangolin-gray.png"
-        if gray_file.is_file():
-            initial_icon_name = str(gray_file)
-
-        if _APP_INDICATOR_KIND in ("AyatanaAppIndicator3", "AppIndicator3") and AppIndicator3 is not None:
-            try:
-                self._indicator = AppIndicator3.Indicator.new(
-                    "pangolin-gui",
-                    initial_icon_name,
-                    AppIndicator3.IndicatorCategory.APPLICATION_STATUS,
-                )
-                self._indicator.set_status(AppIndicator3.IndicatorStatus.ACTIVE)
-                if self.icon_dir.is_dir():
-                    try:
-                        self._indicator.set_icon_theme_path(str(self.icon_dir))
-                    except Exception:
-                        pass
-            except Exception:
-                self._indicator = None
-
-        if self._indicator is None:
-            # Fall back to Gtk.StatusIcon
-            self._status_icon = Gtk.StatusIcon()
-            self._status_icon.connect("popup-menu", self._on_status_icon_popup)
-            self._status_icon.connect("activate", self._on_status_icon_activate)
-            self._apply_status_icon_image(connected=False)
-
-        self._last_state: AppState = AppState()
-        # AppIndicator needs a menu before the first state arrives
+        self._signature: Optional[tuple] = None
+        self._last_state = AppState()
+        self._resync_pending = False
+        self.backend_name = choose_backend()
+        if self.backend_name == "sni":
+            from pangolin_gui.sni import SniTray
+            self.backend = SniTray(self.icon_dir, on_activate=controller.open_status,
+                                   on_secondary_activate=self._toggle_connection)
+        else:
+            from pangolin_gui.tray_gtk import GtkTrayBackend
+            self.backend = GtkTrayBackend(self.icon_dir, on_activate=controller.open_status)
+        log.info("tray backend: %s", self.backend_name)
         self.update(self._last_state)
-
-    def _on_status_icon_popup(self, status_icon: Any, button: int, activate_time: int) -> None:
-        if self._menu:
-            self._menu.popup(None, None, Gtk.StatusIcon.position_menu, status_icon, button, activate_time)
-
-    def _on_status_icon_activate(self, status_icon: Any) -> None:
-        if self._menu:
-            self._menu.popup(None, None, Gtk.StatusIcon.position_menu, status_icon, 0, Gtk.get_current_event_time())
 
     def update(self, state: AppState) -> None:
-        """Update tray menu and icon from AppState, rebuilding menu only when signature changes."""
         self._last_state = state
-        sig = compute_menu_signature(state)
-        if sig != self._menu_signature or self._menu is None:
-            self._menu_signature = sig
-            self._menu = self._build_menu(state)
-            self._menu.show_all()
-            if self._indicator is not None:
-                self._indicator.set_menu(self._menu)
-
-        is_connected = (state.conn == ConnState.CONNECTED)
-        self._update_icon(is_connected)
-        self._update_tooltip(state)
+        sig = (current_language(), compute_menu_signature(state))
+        if sig != self._signature:
+            self._signature = sig
+            self.backend.set_menu(self._wrap_actions(build_menu_model(state, self.controller)))
+        self.backend.set_icon(state.conn == ConnState.CONNECTED)
+        self.backend.set_tooltip("Pangolin", get_status_label(state))
 
     def rebuild(self) -> None:
-        """Reset the cached menu signature and rebuild the menu from the last state."""
-        self._menu_signature = None
+        """Force a rebuild, e.g. after a language change or a click."""
+        self._signature = None
         self.update(self._last_state)
 
-    def _update_icon(self, connected: bool) -> None:
-        filename = "pangolin-orange.png" if connected else "pangolin-gray.png"
-        icon_file = self.icon_dir / filename
+    def close(self) -> None:
+        self.backend.close()
 
-        if self._indicator is not None:
-            try:
-                if icon_file.is_file():
-                    try:
-                        self._indicator.set_icon_full(str(icon_file), "Pangolin")
-                    except Exception:
-                        try:
-                            self._indicator.set_icon(str(icon_file))
-                        except Exception:
-                            self._indicator.set_icon(icon_file.stem)
-                else:
-                    self._indicator.set_icon("network-vpn")
-            except Exception:
-                pass
-        elif self._status_icon is not None:
-            self._apply_status_icon_image(connected)
-
-    def _apply_status_icon_image(self, connected: bool) -> None:
-        if self._status_icon is None:
-            return
-        filename = "pangolin-orange.png" if connected else "pangolin-gray.png"
-        icon_file = self.icon_dir / filename
-        try:
-            if icon_file.is_file():
-                self._status_icon.set_from_file(str(icon_file))
-            else:
-                self._status_icon.set_from_icon_name("network-vpn")
-        except Exception:
-            try:
-                self._status_icon.set_from_icon_name("network-vpn")
-            except Exception:
-                pass
-
-    def _update_tooltip(self, state: AppState) -> None:
-        status_text = get_status_label(state)
-        tooltip = _("Pangolin: {status}").format(status=status_text)
-        if self._status_icon is not None:
-            try:
-                self._status_icon.set_tooltip_text(tooltip)
-            except Exception:
-                pass
-        elif self._indicator is not None:
-            try:
-                self._indicator.set_title(tooltip)
-            except Exception:
-                pass
-
-    def _build_menu(self, state: AppState) -> Gtk.Menu:
-        menu = Gtk.Menu()
-
-        if not state.accounts:
-            # No account -> "Log In…" item instead of account/org sections
-            login_item = Gtk.MenuItem(label=_("Log In…"))
-
-            def on_login(_: Any) -> None:
-                if hasattr(self.controller, "add_account"):
-                    self.controller.add_account()
-                elif hasattr(self.controller, "login"):
-                    self.controller.login()
-
-            login_item.connect("activate", on_login)
-            menu.append(login_item)
-
-            menu.append(Gtk.SeparatorMenuItem())
-            self._append_common_items(menu, state)
-            return menu
-
-        # 1. Status line
-        status_text = get_status_label(state)
-        status_item = Gtk.MenuItem(label=status_text)
-        status_item.set_sensitive(False)
-        menu.append(status_item)
-
-        # 2. Connect/Disconnect toggle
-        is_connected = (state.conn in (ConnState.CONNECTED, ConnState.CONNECTING))
-        toggle_label = _("Disconnect") if is_connected else _("Connect")
-        toggle_item = Gtk.CheckMenuItem(label=toggle_label)
-        self._connect_toggle_handler = toggle_item.connect("toggled", self._on_connect_toggled)
-        toggle_item.handler_block(self._connect_toggle_handler)
-        toggle_item.set_active(is_connected)
-        toggle_item.handler_unblock(self._connect_toggle_handler)
-        if state.conn in (ConnState.CONNECTING, ConnState.DISCONNECTING):
-            toggle_item.set_sensitive(False)
-        menu.append(toggle_item)
-
-        # 3. "Sites" submenu (when connected)
-        if state.conn == ConnState.CONNECTED:
-            sites_item = Gtk.MenuItem(label=_("Sites"))
-            sites_menu = Gtk.Menu()
-
-            open_status_item = Gtk.MenuItem(label=_("Open Status…"))
-            open_status_item.connect("activate", lambda _: self.controller.open_status())
-            sites_menu.append(open_status_item)
-            sites_menu.append(Gtk.SeparatorMenuItem())
-
-            peers = state.status.peers if state.status and state.status.peers else []
-            if peers:
-                for peer in peers:
-                    peer_item = Gtk.MenuItem(label=peer.name)
-                    peer_menu = Gtk.Menu()
-
-                    # Status
-                    st_val = _("Connected") if peer.connected else _("Disconnected")
-                    st_label = _("Status: {status}").format(status=st_val)
-                    st_item = Gtk.MenuItem(label=st_label)
-                    st_item.set_sensitive(False)
-                    peer_menu.append(st_item)
-
-                    # Connection Direct/Relay/Local
-                    conn_type = peer_connection_type(peer)
-                    conn_item = Gtk.MenuItem(label=_("Connection: {type}").format(type=conn_type))
-                    conn_item.set_sensitive(False)
-                    peer_menu.append(conn_item)
-
-                    # Endpoint
-                    ep_val = peer.endpoint if peer.endpoint else "—"
-                    ep_item = Gtk.MenuItem(label=_("Endpoint: {endpoint}").format(endpoint=ep_val))
-                    ep_item.set_sensitive(False)
-                    peer_menu.append(ep_item)
-
-                    # Last Seen relative
-                    ls_rel = format_relative_time(peer.last_seen)
-                    ls_val = ls_rel if ls_rel else "—"
-                    ls_item = Gtk.MenuItem(label=_("Last Seen: {last_seen}").format(last_seen=ls_val))
-                    ls_item.set_sensitive(False)
-                    peer_menu.append(ls_item)
-
-                    # RTT
-                    if peer.connected and peer.rtt_ms > 0:
-                        rtt_val = f"{peer.rtt_ms:.1f} ms"
-                    else:
-                        rtt_val = "—"
-                    rtt_item = Gtk.MenuItem(label=_("RTT: {rtt}").format(rtt=rtt_val))
-                    rtt_item.set_sensitive(False)
-                    peer_menu.append(rtt_item)
-
-                    peer_item.set_submenu(peer_menu)
-                    sites_menu.append(peer_item)
-            else:
-                no_sites = Gtk.MenuItem(label=_("No sites"))
-                no_sites.set_sensitive(False)
-                sites_menu.append(no_sites)
-
-            sites_item.set_submenu(sites_menu)
-            menu.append(sites_item)
-            menu.append(self._build_clients_submenu(state))
-
-        menu.append(Gtk.SeparatorMenuItem())
-
-        # 4. "Account" submenu
-        account_item = Gtk.MenuItem(label=_("Account"))
-        account_menu = Gtk.Menu()
-
-        email_counts: dict[str, int] = {}
-        for acc in state.accounts:
-            email_counts[acc.email] = email_counts.get(acc.email, 0) + 1
-
-        active_uid = state.active_account.user_id if state.active_account else None
-        radio_group = None
-        for acc in state.accounts:
-            label = acc.display_name
-            if email_counts.get(acc.email, 0) > 1 and acc.host:
-                label = f"{acc.display_name} ({acc.host})"
-            radio = Gtk.RadioMenuItem.new_with_label(radio_group, label)
-            radio_group = radio.get_group()
-            is_active = (acc.user_id == active_uid)
-            radio.set_active(is_active)
-
-            def on_select_acc(item: Any, uid: str = acc.user_id) -> None:
-                if item.get_active() and uid != active_uid:
-                    self.controller.select_account(uid)
-
-            radio.connect("toggled", on_select_acc)
-            account_menu.append(radio)
-
-        account_menu.append(Gtk.SeparatorMenuItem())
-
-        add_acc_item = Gtk.MenuItem(label=_("Add Account…"))
-        add_acc_item.connect("activate", lambda _: self.controller.add_account())
-        account_menu.append(add_acc_item)
-
-        logout_item = Gtk.MenuItem(label=_("Log Out"))
-        logout_item.connect("activate", lambda _: self.controller.logout())
-        if not active_uid:
-            logout_item.set_sensitive(False)
-        account_menu.append(logout_item)
-
-        account_item.set_submenu(account_menu)
-        menu.append(account_item)
-
-        # 5. "Organization" submenu
-        org_item = Gtk.MenuItem(label=_("Organization"))
-        org_menu = Gtk.Menu()
-
-        active_org_id = (
-            state.status.org_id
-            if state.status and state.status.org_id
-            else (state.active_account.org_id if state.active_account else "")
-        )
-
-        if not state.orgs:
-            empty_item = Gtk.MenuItem(label=_("No Organizations"))
-            empty_item.set_sensitive(False)
-            org_menu.append(empty_item)
-        else:
-            org_group = None
-            for org in state.orgs:
-                radio = Gtk.RadioMenuItem.new_with_label(org_group, org.name)
-                org_group = radio.get_group()
-                is_active = (org.org_id == active_org_id)
-                radio.set_active(is_active)
-
-                def on_select_org(item: Any, oid: str = org.org_id) -> None:
-                    if item.get_active() and oid != active_org_id:
-                        self.controller.select_org(oid)
-
-                radio.connect("toggled", on_select_org)
-                org_menu.append(radio)
-
-        org_item.set_submenu(org_menu)
-        menu.append(org_item)
-
-        menu.append(Gtk.SeparatorMenuItem())
-        self._append_common_items(menu, state)
-
-        return menu
-
-    def _build_clients_submenu(self, state: AppState) -> Gtk.MenuItem:
-        """Online clients of the org; clicking one copies its tunnel IP."""
-        count = len(state.clients)
-        title = _("Online Clients ({count})").format(count=count) if count else _("Online Clients")
-        clients_item = Gtk.MenuItem(label=title)
-        sub = Gtk.Menu()
-
-        if state.clients:
-            hint = Gtk.MenuItem(label=_("Click to copy the IP address"))
-            hint.set_sensitive(False)
-            sub.append(hint)
-            sub.append(Gtk.SeparatorMenuItem())
-            for client in state.clients:
-                item = Gtk.MenuItem(label=client_menu_label(client))
-                if client.owner:
-                    item.set_tooltip_text(client.owner)
-                item.connect("activate", lambda _w, ip=client.address, name=client.name:
-                             self.controller.copy_client_ip(ip, name))
-                sub.append(item)
-        else:
-            if state.clients_error == "forbidden":
-                text = _("Your role may not list clients")
-            elif state.clients_error:
-                text = _("Could not load clients")
-            else:
-                text = _("No other clients online")
-            empty = Gtk.MenuItem(label=text)
-            empty.set_sensitive(False)
-            sub.append(empty)
-
-        sub.append(Gtk.SeparatorMenuItem())
-        refresh = Gtk.MenuItem(label=_("Refresh"))
-        refresh.connect("activate", lambda _w: self.controller.refresh_clients())
-        sub.append(refresh)
-
-        clients_item.set_submenu(sub)
-        return clients_item
-
-    def _append_common_items(self, menu: Gtk.Menu, state: AppState) -> None:
-        pref_item = Gtk.MenuItem(label=_("Preferences…"))
-        pref_item.connect("activate", lambda _: self.controller.open_preferences())
-        menu.append(pref_item)
-
-        logs_item = Gtk.MenuItem(label=_("Logs…"))
-        logs_item.connect("activate", lambda _: self.controller.open_logs())
-        menu.append(logs_item)
-
-        more_item = self._build_more_submenu(state)
-        menu.append(more_item)
-
-        menu.append(Gtk.SeparatorMenuItem())
-
-        quit_item = Gtk.MenuItem(label=_("Quit Pangolin"))
-        quit_item.connect("activate", lambda _: self.controller.quit())
-        menu.append(quit_item)
-
-    def _build_more_submenu(self, state: AppState) -> Gtk.MenuItem:
-        more_item = Gtk.MenuItem(label=_("More"))
-        more_menu = Gtk.Menu()
-
-        docs_item = Gtk.MenuItem(label=_("Documentation"))
-        docs_item.connect("activate", lambda _: self.controller.open_url("https://docs.pangolin.net"))
-        more_menu.append(docs_item)
-
-        more_menu.append(Gtk.SeparatorMenuItem())
-
-        ver = state.cli_version
-        if not ver and state.status and state.status.version:
-            ver = state.status.version
-        ver_label = _("Version {version}").format(version=ver) if ver else _("Version unknown")
-        ver_item = Gtk.MenuItem(label=ver_label)
-        ver_item.set_sensitive(False)
-        more_menu.append(ver_item)
-
-        if not state.cli_installed:
-            cli_item = Gtk.MenuItem(label=_("Install Pangolin CLI…"))
-            cli_item.connect(
-                "activate",
-                lambda _: self.controller.open_url("https://docs.pangolin.net/manage/clients/install-client"),
-            )
-            more_menu.append(cli_item)
-
-        more_item.set_submenu(more_menu)
-        return more_item
-
-    def _on_connect_toggled(self, item: Gtk.CheckMenuItem) -> None:
-        if item.get_active():
-            self.controller.connect()
-        else:
+    def _toggle_connection(self) -> None:
+        if self._last_state.conn in (ConnState.CONNECTED, ConnState.CONNECTING):
             self.controller.disconnect()
+        else:
+            self.controller.connect()
+
+    def _wrap_actions(self, nodes: list[MenuNode]) -> list[MenuNode]:
+        """After every click, rebuild from the real state.
+
+        GTK toggles check/radio items itself on click; if the action is
+        cancelled or fails, the menu would otherwise keep showing a wrong mark.
+        """
+        for node in walk(nodes):
+            if node.action is not None:
+                node.action = self._after_click(node.action)
+        return nodes
+
+    def _after_click(self, action: Callable[[], None]) -> Callable[[], None]:
+        def run() -> None:
+            try:
+                action()
+            finally:
+                self._schedule_resync()
+        return run
+
+    def _schedule_resync(self) -> None:
+        if self._resync_pending:
+            return
+        self._resync_pending = True
+        from gi.repository import GLib
+
+        def resync() -> bool:
+            self._resync_pending = False
+            self.rebuild()
+            return False
+        GLib.timeout_add(300, resync)
