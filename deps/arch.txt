@@ -1,0 +1,7 @@
+# Arch Linux / Manjaro / EndeavourOS – install with: sudo pacman -S --needed $(grep -v '^#' deps/arch.txt)
+# Pangolin CLI itself: AUR package "pangolin-bin" (or the official get-cli.sh script)
+python
+python-gobject
+gtk3
+libayatana-appindicator
+sudo

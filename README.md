@@ -22,16 +22,45 @@ darüber.
 
 Noch nicht enthalten: Auswahl eines Exit-Nodes (die CLI kann Exit-Nodes nur interaktiv auflisten).
 
-## Installation
+## Abhängigkeiten
 
-Entwickelt unter Ubuntu 24.04; andere Debian-basierte Distributionen sollten genauso funktionieren.
+Die GUI ist reines Python ohne pip-Pakete. Sie braucht nur Systempakete:
+
+| Zweck | Arch Linux | Debian / Ubuntu |
+|---|---|---|
+| Python 3.10+ | `python` | (vorinstalliert) |
+| GTK-Bindings (PyGObject) | `python-gobject` | `python3-gi` |
+| GTK 3 | `gtk3` | `gir1.2-gtk-3.0` |
+| Tray-Icon (AppIndicator) | `libayatana-appindicator` | `gir1.2-ayatanaappindicator3-0.1` |
+| Admin-Rechte beim Verbinden | `sudo` | (vorinstalliert) |
+| Pangolin-CLI | AUR `pangolin-bin` oder `get-cli.sh` | `get-cli.sh` |
+| Tests (optional) | `python-pytest` | `python3-pytest` |
+
+Die Paketlisten stehen auch in [`deps/arch.txt`](deps/arch.txt) und
+[`deps/debian.txt`](deps/debian.txt); `install.sh --deps` liest sie von dort.
+
+## Installation auf Arch Linux
+
+Gilt auch für Manjaro, EndeavourOS und andere Arch-Ableger.
 
 ### 1. Pangolin-CLI installieren
 
-Nach der [offiziellen Anleitung](https://docs.pangolin.net/manage/clients/install-client):
+Aus dem AUR (mit einem AUR-Helper wie `yay` oder `paru`):
+
+```bash
+yay -S pangolin-bin
+```
+
+Alternativ das offizielle Installationsskript
+([Anleitung](https://docs.pangolin.net/manage/clients/install-client)):
 
 ```bash
 curl -fsSL https://static.pangolin.net/get-cli.sh | bash
+```
+
+Prüfen:
+
+```bash
 pangolin version
 ```
 
@@ -48,27 +77,69 @@ cd pangolin-linux-gui
 ./install.sh --deps
 ```
 
-Das installiert per `sudo apt` die fehlenden Pakete (`python3-gi`, `gir1.2-gtk-3.0`,
-`gir1.2-ayatanaappindicator3-0.1`) und legt einen Eintrag „Pangolin“ im Anwendungsmenü an.
+Das installiert per `sudo pacman -S --needed` die fehlenden Pakete aus `deps/arch.txt` und legt
+einen Eintrag „Pangolin“ im Anwendungsmenü an. Ohne `--deps` zeigt das Skript nur an, was fehlt.
 
-Weitere Optionen:
+Von Hand geht es so:
+
+```bash
+sudo pacman -S --needed python python-gobject gtk3 libayatana-appindicator sudo
+```
+
+### Arch-spezifische Hinweise
+
+- **sudo:** Bei einer minimalen Arch-Installation ist `sudo` oft nicht eingerichtet. Dein
+  Benutzer muss `sudo` nutzen dürfen (z. B. Gruppe `wheel` und `%wheel ALL=(ALL:ALL) ALL` in
+  `visudo`). Sonst schlägt *Connect* fehl, denn die Pangolin-CLI startet den Tunnel per `sudo`.
+- **Tray-Icon je Desktop:**
+  - **KDE Plasma:** funktioniert ohne Zusatz.
+  - **GNOME:** braucht die Erweiterung *AppIndicator and KStatusNotifierItem Support*:
+    `sudo pacman -S gnome-shell-extension-appindicator`, danach abmelden/anmelden und die
+    Erweiterung in *Erweiterungen* aktivieren.
+  - **XFCE:** Panel-Element *Statusbenachrichtigungen* bzw. *Infobereich* zum Panel hinzufügen
+    (seit XFCE 4.16 Teil von `xfce4-panel`).
+  - **Hyprland / Sway / andere Wayland-Compositors:** braucht eine Leiste mit Tray, z. B.
+    Waybar mit dem Modul `tray`.
+  - Ohne Tray öffnet die App ihr Statusfenster; Verbinden und Trennen gehen auch dort.
+- **Benachrichtigungen:** Fehlermeldungen kommen als Desktop-Benachrichtigung. Unter
+  Fenstermanagern ohne Benachrichtigungsdienst `dunst` oder `mako` installieren.
+- **Browser für den Login:** geöffnet wird der Standardbrowser (`xdg-open`). Falls nichts
+  passiert: `xdg-settings set default-web-browser firefox.desktop`.
+
+## Installation auf Debian / Ubuntu
+
+1. Pangolin-CLI installieren:
+
+   ```bash
+   curl -fsSL https://static.pangolin.net/get-cli.sh | bash
+   ```
+
+2. Repository klonen und installieren:
+
+   ```bash
+   git clone https://github.com/Teuflor/pangolin-linux-gui.git
+   cd pangolin-linux-gui
+   ./install.sh --deps
+   ```
+
+   Das installiert per `sudo apt-get` die Pakete aus `deps/debian.txt`.
+
+3. **GNOME (Standard-Ubuntu):** Die Erweiterung *AppIndicator and KStatusNotifierItem Support*
+   ist meist schon aktiv, sonst:
+
+   ```bash
+   sudo apt install gnome-shell-extension-appindicator
+   ```
+
+## Weitere Optionen von install.sh
 
 ```bash
 ./install.sh --autostart   # beim Anmelden im Tray starten
 ./install.sh --uninstall   # Menüeintrag, Icon und Autostart entfernen
 ```
 
-### Tray-Icon unter GNOME
-
-GNOME (Standard-Ubuntu) zeigt Tray-Icons nur mit der Erweiterung
-*AppIndicator and KStatusNotifierItem Support*. Unter Ubuntu ist sie meist schon aktiv, sonst:
-
-```bash
-sudo apt install gnome-shell-extension-appindicator
-```
-
-KDE, XFCE, Cinnamon und MATE zeigen Tray-Icons ohne Zusatz. Gibt es keinen Tray, öffnet die App
-stattdessen ihr Statusfenster.
+Das Repo bleibt an seinem Ort; Menüeintrag und Autostart zeigen auf `bin/pangolin-gui` im
+geklonten Ordner. Nach `git pull` ist die neue Version sofort aktiv.
 
 ## Starten
 
@@ -130,15 +201,31 @@ pangolin_gui/
   tray.py                   Tray-Icon und Menü
   windows/                  Status, Logs, Einstellungen, Login
 tests/                      pytest
+deps/arch.txt               Paketliste Arch
+deps/debian.txt             Paketliste Debian/Ubuntu
 install.sh                  Abhängigkeiten, Menüeintrag, Autostart
 ```
 
 ## Tests
 
 ```bash
-sudo apt install python3-pytest
+sudo pacman -S python-pytest      # Arch
+sudo apt install python3-pytest   # Debian/Ubuntu
 python3 -m pytest
 ```
+
+Die Tests brauchen weder GTK noch die Pangolin-CLI noch einen Server.
+
+## Fehlersuche
+
+| Problem | Lösung |
+|---|---|
+| `Namespace Gtk not available` | `gtk3` + `python-gobject` (Arch) bzw. `gir1.2-gtk-3.0` (Debian) fehlen |
+| Kein Tray-Icon, nur Statusfenster | Desktop hat keinen Tray, siehe Hinweise oben |
+| *Connect*: „Authentication failed or was cancelled“ | Passwort falsch oder Benutzer darf kein `sudo` |
+| *Connect* hängt bei *Registering…* | `pangolin logs client -n 100` prüfen; Server erreichbar? |
+| Organisationen bleiben leer | Session abgelaufen: Tray → *Account* → *Add Account…* |
+| „No permission to access /var/run/olm.sock“ | Socket gehört root; bitte melden, mit `ls -l /var/run/olm.sock` |
 
 ## Lizenz und Marken
 

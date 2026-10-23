@@ -1,0 +1,5 @@
+# Debian / Ubuntu / Mint – install with: sudo apt install $(grep -v '^#' deps/debian.txt)
+# Pangolin CLI itself: official get-cli.sh script
+python3-gi
+gir1.2-gtk-3.0
+gir1.2-ayatanaappindicator3-0.1
