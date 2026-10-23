@@ -465,10 +465,10 @@ class DbusMenu:
                 children_variants = []
             else:
                 next_depth = recursion_depth - 1 if recursion_depth > 0 else -1
+                # GLib.Variant("av", ...) wraps each element itself; wrapping
+                # here too would send v(v(...)), which dbusmenu clients drop.
                 children_variants = [
-                    GLib.Variant.new_variant(
-                        self._build_node_layout(child_id, next_depth, property_names)
-                    )
+                    self._build_node_layout(child_id, next_depth, property_names)
                     for child_id in self._root_children
                 ]
 
@@ -504,9 +504,7 @@ class DbusMenu:
         else:
             next_depth = depth - 1 if depth > 0 else -1
             children_variants = [
-                GLib.Variant.new_variant(
-                    self._build_node_layout(self._str_to_int[child.id], next_depth, property_names)
-                )
+                self._build_node_layout(self._str_to_int[child.id], next_depth, property_names)
                 for child in node.children
             ]
 

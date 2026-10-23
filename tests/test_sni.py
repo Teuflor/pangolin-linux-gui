@@ -372,6 +372,16 @@ def test_sni_tray_integration(tmp_path: Path):
             2000,
             None,
         )
+        # unpack() strips nested variants, so check the wire format directly:
+        # every child must be a variant holding the struct, not a variant of a variant.
+        raw_children = layout_reply.get_child_value(1).get_child_value(2)
+        for i in range(raw_children.n_children()):
+            child = raw_children.get_child_value(i).get_variant()
+            assert child.get_type_string() == "(ia{sv}av)"
+            nested = child.get_child_value(2)
+            for j in range(nested.n_children()):
+                assert nested.get_child_value(j).get_variant().get_type_string() == "(ia{sv}av)"
+
         rev, layout = layout_reply.unpack()
         assert rev >= 1
         root_id, root_props, children = layout
