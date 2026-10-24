@@ -57,7 +57,8 @@ class PangolinApp(Gtk.Application):
             GLib.timeout_add_seconds(3, self._auto_connect)
 
     def do_activate(self):
-        # First launch from autostart stays in the tray; any later launch shows the window.
+        # The first launch stays in the tray (unless --show or there is no tray);
+        # launching again while running shows the window.
         if self._first_activate and self._start_hidden:
             self._first_activate = False
             return

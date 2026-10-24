@@ -1,4 +1,4 @@
-"""Entry point: `python3 -m pangolin_gui [--hidden] [--debug]`."""
+"""Entry point: `python3 -m pangolin_gui [--show] [--debug]`."""
 from __future__ import annotations
 
 import argparse
@@ -8,7 +8,9 @@ import sys
 
 def main(argv: list[str] | None = None) -> int:
     parser = argparse.ArgumentParser(prog="pangolin-gui", description="Pangolin tray client for Linux")
-    parser.add_argument("--hidden", action="store_true", help="start in the tray without opening a window")
+    parser.add_argument("--show", action="store_true", help="also open the status window on start")
+    # The default since tray-only became the default; kept for existing autostart entries.
+    parser.add_argument("--hidden", action="store_true", help=argparse.SUPPRESS)
     parser.add_argument("--debug", action="store_true", help="verbose logging")
     args = parser.parse_args(argv)
 
@@ -19,7 +21,7 @@ def main(argv: list[str] | None = None) -> int:
 
     from pangolin_gui.app import PangolinApp
     # Gtk.Application parses its own argv; hand it only the program name.
-    return PangolinApp(start_hidden=args.hidden).run([sys.argv[0]])
+    return PangolinApp(start_hidden=not args.show).run([sys.argv[0]])
 
 
 if __name__ == "__main__":

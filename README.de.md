@@ -190,12 +190,14 @@ ausführen; nach `pangolin update` ebenso, falls die CLI dabei wieder in `~/.loc
 ## Starten
 
 ```bash
-./bin/pangolin-gui            # Statusfenster öffnen, Icon im Tray
-./bin/pangolin-gui --hidden   # nur Tray (für Autostart)
+./bin/pangolin-gui            # nur Icon im Tray
+./bin/pangolin-gui --show     # zusätzlich das Statusfenster öffnen
 ./bin/pangolin-gui --debug    # ausführliche Logs im Terminal
 ```
 
-Ein zweiter Aufruf startet keine zweite Instanz, sondern holt das Statusfenster nach vorne.
+Das Statusfenster öffnet ein Linksklick auf das Tray-Icon. Ein zweiter Aufruf startet keine
+zweite Instanz, sondern holt das Statusfenster nach vorne. Ohne Tray (siehe Hinweise zu den
+Desktops oben) öffnet sich das Statusfenster sofort.
 
 ### Tray-Icon und Klicks
 

@@ -189,13 +189,14 @@ after `pangolin update` if the CLI ends up in `~/.local/bin` again.
 ## Running
 
 ```bash
-./bin/pangolin-gui            # open the status window, icon in the tray
-./bin/pangolin-gui --hidden   # tray only (for autostart)
+./bin/pangolin-gui            # icon in the tray only
+./bin/pangolin-gui --show     # also open the status window
 ./bin/pangolin-gui --debug    # verbose logs in the terminal
 ```
 
-Starting it a second time does not open a second instance but brings the status window to the
-front.
+The status window opens with a left click on the tray icon. Starting the app a second time
+does not open a second instance but brings the status window to the front. Without a tray
+(see the desktop notes above) the status window opens right away.
 
 ### Tray icon and clicks
 
