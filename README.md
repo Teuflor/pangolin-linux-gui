@@ -366,6 +366,10 @@ Die Tests brauchen weder GTK noch die Pangolin-CLI noch einen Server.
 
 ## Lizenz und Marken
 
-Pangolin und das Pangolin-Logo gehören Fossorial, Inc. Dieses Projekt ist nicht offiziell und
-steht in keiner Verbindung zu Fossorial. Die Icons stammen aus dem Windows-Client
-([fosrl/windows](https://github.com/fosrl/windows)).
+Dieses Projekt steht unter der [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+
+Pangolin und das Pangolin-Logo sind Marken von Fossorial, Inc. Dieses Projekt ist ein
+inoffizieller Client, nicht von Fossorial entwickelt und steht in keiner Verbindung zu
+Fossorial. Es nutzt weder das Pangolin-Logo noch Code von Fossorial; die eigentliche Arbeit
+macht die separat installierte offizielle [Pangolin-CLI](https://github.com/fosrl/cli).
+Die Tray-Icons sind eigene Entwürfe (Quellen in `data/icons/src/`).

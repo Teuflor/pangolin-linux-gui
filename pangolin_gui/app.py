@@ -19,7 +19,8 @@ from pangolin_gui.state import StateManager  # noqa: E402
 
 log = logging.getLogger(__name__)
 
-APP_ID = "net.pangolin.LinuxClient"
+# Own reverse-DNS ID: this is an unofficial client, so not under pangolin.net.
+APP_ID = "io.github.teuflor.PangolinGui"
 ROOT = Path(__file__).resolve().parent.parent
 ICON_DIR = ROOT / "data" / "icons"
 ASKPASS = ROOT / "bin" / "pangolin-gui-askpass"
