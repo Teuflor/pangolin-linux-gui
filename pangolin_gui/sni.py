@@ -147,17 +147,21 @@ def escape_label(label: str) -> str:
 
 
 def node_properties(node: MenuNode) -> dict[str, GLib.Variant]:
-    """Return non-default com.canonical.dbusmenu properties for a MenuNode."""
+    """Return the com.canonical.dbusmenu properties for a MenuNode.
+
+    label, enabled and icon-name are always sent, even at their defaults: on a layout
+    update libdbusmenu-qt (Plasma) only applies the properties present in the reply, so
+    an omitted default would leave a stale value, e.g. "Connect" stayed disabled after
+    the same item had been the disabled "Disconnect" while disconnecting.
+    """
     if node.kind == SEPARATOR:
         return {"type": GLib.Variant("s", "separator")}
 
-    props: dict[str, GLib.Variant] = {}
-
-    if node.label:
-        props["label"] = GLib.Variant("s", escape_label(node.label))
-
-    if node.kind == LABEL or not node.enabled:
-        props["enabled"] = GLib.Variant("b", False)
+    props: dict[str, GLib.Variant] = {
+        "label": GLib.Variant("s", escape_label(node.label or "")),
+        "enabled": GLib.Variant("b", node.kind != LABEL and node.enabled),
+        "icon-name": GLib.Variant("s", node.icon_name or ""),
+    }
 
     if node.kind == CHECK:
         props["toggle-type"] = GLib.Variant("s", "checkmark")
@@ -168,9 +172,6 @@ def node_properties(node: MenuNode) -> dict[str, GLib.Variant]:
 
     if node.children:
         props["children-display"] = GLib.Variant("s", "submenu")
-
-    if node.icon_name:
-        props["icon-name"] = GLib.Variant("s", node.icon_name)
 
     return props
 

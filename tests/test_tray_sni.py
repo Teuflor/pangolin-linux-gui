@@ -138,4 +138,16 @@ def test_tray_over_dbus(session_bus):
                         GLib.Variant("(iias)", (0, -1, [])), "(u(ia{sv}av))").unpack()
     labels = [props.get("label") for _i, props in flatten(layout)]
     assert "Disconnect" in labels and "Connect" not in labels
+
+    # Disconnecting greys the entry out; once disconnected, "Connect" must be sent as
+    # enabled explicitly, or Plasma keeps the stale enabled=false of the same item id.
+    toggle_id = next(i for i, props in flatten(layout) if props.get("label") == "Disconnect")
+    for conn in (ConnState.DISCONNECTING, ConnState.DISCONNECTED):
+        tray.update(AppState(conn=conn, accounts=[ACC], active_account=ACC))
+        assert pump(lambda: True, timeout=0.3)
+    _rev, layout = call(client, service, "/MenuBar", "com.canonical.dbusmenu", "GetLayout",
+                        GLib.Variant("(iias)", (0, -1, [])), "(u(ia{sv}av))").unpack()
+    toggle = dict((i, props) for i, props in flatten(layout))[toggle_id]
+    assert toggle["label"] == "Connect"
+    assert toggle["enabled"] is True
     tray.close()

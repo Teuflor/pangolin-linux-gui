@@ -68,7 +68,9 @@ def test_node_properties():
     node_norm = MenuNode(id="n1", label="Connect", kind=NORMAL)
     p_norm = node_properties(node_norm)
     assert p_norm["label"].unpack() == "Connect"
-    assert "enabled" not in p_norm  # default True omitted
+    # Defaults are sent explicitly, so Plasma never keeps a stale value on an update.
+    assert p_norm["enabled"].unpack() is True
+    assert p_norm["icon-name"].unpack() == ""
     assert "type" not in p_norm
 
     # Separator
