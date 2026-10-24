@@ -8,7 +8,7 @@ import urllib.error
 import urllib.request
 from urllib.parse import quote, urlencode
 
-from pangolin_gui.models import Account, Org, OrgClient
+from pangolin_gui.models import Account, Org, OrgClient, OrgSite
 
 log = logging.getLogger(__name__)
 
@@ -101,6 +101,23 @@ class PangolinApi:
         orgs = [Org(org_id=o["orgId"], name=o.get("name") or o["orgId"])
                 for o in data.get("orgs") or []]
         return sorted(orgs, key=lambda o: o.name.lower())
+
+    def list_sites(self, org_id: str) -> list[OrgSite]:
+        """Tunnel sites of an org. The server's own "local" site is skipped: clients never
+        connect to it."""
+        query = urlencode({"pageSize": 200})
+        data = self._request("GET", f"/org/{quote(org_id, safe='')}/sites?{query}")
+        sites = []
+        for item in data.get("sites") or []:
+            try:
+                site_id = int(item.get("siteId"))
+            except (TypeError, ValueError):
+                continue
+            if item.get("type") == "local" or item.get("archived"):
+                continue
+            sites.append(OrgSite(site_id=site_id, name=item.get("name") or item.get("niceId") or f"#{site_id}",
+                                 online=bool(item.get("online"))))
+        return sorted(sites, key=lambda s: s.name.lower())
 
 
 def _parse_client(item: dict) -> OrgClient | None:

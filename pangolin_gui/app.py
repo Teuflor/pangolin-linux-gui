@@ -310,6 +310,27 @@ class PangolinApp(Gtk.Application):
     def refresh_clients(self):
         self.state_mgr.refresh_now(reload_clients=True)
 
+    def explain_site(self, name: str, online: bool):
+        """Dialog for a site of the org that the tunnel does not connect to."""
+        if online:
+            text = _("Site “{name}” is not connected").format(name=name)
+            body = _("Pangolin clients only connect to sites that have a private resource you "
+                     "are allowed to use. This site has none, so it is not part of your tunnel. "
+                     "Public resources of the site still work through the server.\n\n"
+                     "To reach the site through the client, add a private resource (host or CIDR) "
+                     "for it in the Pangolin dashboard under Resources → Private and give your "
+                     "user or role access. It is connected the next time you connect.")
+        else:
+            text = _("Site “{name}” is offline").format(name=name)
+            body = _("The site's connector (Newt) is not connected to the server, so the client "
+                     "cannot reach it. Check the site in the Pangolin dashboard.")
+        dialog = Gtk.MessageDialog(message_type=Gtk.MessageType.INFO, buttons=Gtk.ButtonsType.OK, text=text)
+        dialog.format_secondary_text(body)
+        dialog.set_title("Pangolin")
+        dialog.set_keep_above(True)
+        dialog.connect("response", lambda d, _r: d.destroy())
+        dialog.present()
+
     def apply_language(self, code: str):
         """Switch the UI language at runtime: rebuild tray, recreate windows."""
         i18n.set_language(code)

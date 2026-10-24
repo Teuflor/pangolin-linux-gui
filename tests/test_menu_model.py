@@ -2,7 +2,7 @@
 import pytest
 
 from pangolin_gui.menu_model import LABEL, NORMAL, RADIO, SEPARATOR, MenuNode, signature, walk
-from pangolin_gui.models import Account, AppState, ConnState, OlmStatus, Org, OrgClient, Peer
+from pangolin_gui.models import Account, AppState, ConnState, OlmStatus, Org, OrgClient, OrgSite, Peer
 from pangolin_gui.tray import build_menu_model, choose_backend
 
 
@@ -75,6 +75,23 @@ def test_connected_menu_has_sites_clients_and_radio_marks():
     assert [(n.kind, n.checked) for n in orgs] == [(RADIO, False), (RADIO, True)]  # live org wins
     find(nodes, "client:3").action()
     assert ctl.calls[-1] == ("copy_client_ip", ("100.90.128.7", "laptop"))
+
+
+def test_sites_without_tunnel_are_listed_and_explained():
+    state = AppState(
+        conn=ConnState.CONNECTED, accounts=[ACC], active_account=ACC,
+        status=OlmStatus(connected=True, registered=True, org_id="o1",
+                         peers=[Peer(7, "Home", True, 12.0, None)]),
+        sites=[OrgSite(7, "Home", True), OrgSite(8, "Office", True), OrgSite(9, "Cabin", False)])
+    ctl = Recorder()
+    nodes = build_menu_model(state, ctl)
+    sites = find(nodes, "sites").children
+    assert [n.id for n in sites if n.kind != SEPARATOR] == ["site:7", "site:other:8", "site:other:9"]
+    assert find(nodes, "site:other:8").label == "Office – not via client"
+    assert find(nodes, "site:other:9").label == "Cabin – offline"
+    find(nodes, "site:other:8").action()
+    find(nodes, "site:other:9").action()
+    assert ctl.calls[-2:] == [("explain_site", ("Office", True)), ("explain_site", ("Cabin", False))]
 
 
 def test_sites_hidden_when_disconnected():

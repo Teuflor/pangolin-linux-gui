@@ -178,7 +178,8 @@ def clients_signature(state: AppState) -> tuple:
     if state.conn != ConnState.CONNECTED:
         return ()
     return (state.clients_error,
-            tuple((c.client_id, c.name, c.address, c.owner) for c in state.clients))
+            tuple((c.client_id, c.name, c.address, c.owner) for c in state.clients),
+            tuple((s.site_id, s.name, s.online) for s in state.sites))
 
 
 def client_menu_label(client: OrgClient) -> str:
@@ -217,7 +218,7 @@ def build_menu_model(state: AppState, controller: Any) -> list[MenuNode]:
     nodes.append(MenuNode("open_status", _("Open Status…"), action=c.open_status))
 
     if state.conn == ConnState.CONNECTED:
-        nodes.append(_sites_node(state))
+        nodes.append(_sites_node(state, c))
         nodes.append(_clients_node(state, c))
 
     nodes.append(separator("sep_account"))
@@ -228,7 +229,7 @@ def build_menu_model(state: AppState, controller: Any) -> list[MenuNode]:
     return nodes
 
 
-def _sites_node(state: AppState) -> MenuNode:
+def _sites_node(state: AppState, c: Any) -> MenuNode:
     peers = state.status.peers if state.status else []
     children: list[MenuNode] = []
     for p in peers:
@@ -244,6 +245,18 @@ def _sites_node(state: AppState) -> MenuNode:
             f"site:{p.site_id}", p.name or _("Site {site_id}").format(site_id=p.site_id),
             icon_name="emblem-ok-symbolic" if p.connected else "",
             children=[MenuNode(f"site:{p.site_id}:{i}", text, kind=LABEL) for i, text in enumerate(details)]))
+
+    # Sites of the org the tunnel does not use: clients only connect to sites with a
+    # private resource they may use. A click explains that in a dialog.
+    peer_ids = {p.site_id for p in peers}
+    others = [s for s in state.sites if s.site_id not in peer_ids]
+    if others and children:
+        children.append(separator("sites:sep_other"))
+    for s in others:
+        label = (_("{name} – not via client") if s.online else _("{name} – offline")).format(name=s.name)
+        children.append(MenuNode(f"site:other:{s.site_id}", label, icon_name="dialog-information-symbolic",
+                                 action=lambda name=s.name, online=s.online: c.explain_site(name, online)))
+
     if not children:
         children.append(MenuNode("sites:none", _("No sites"), kind=LABEL))
     return MenuNode("sites", _("Sites"), children=children)

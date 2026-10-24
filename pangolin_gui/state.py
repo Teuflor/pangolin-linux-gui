@@ -188,7 +188,8 @@ class StateManager:
         self._orgs_for = (active.user_id, active.host)
 
     def _reload_clients(self, status: Optional[OlmStatus]) -> None:
-        """Online clients of the current org, only while connected and at most every 30 s."""
+        """Online clients and sites of the current org, only while connected and at most
+        every 30 s."""
         with self._lock:
             active = copy.deepcopy(self._state.active_account)
         connected = bool(status and status.connected and status.registered)
@@ -196,7 +197,7 @@ class StateManager:
         if not connected or active is None or not org_id or not active.session_token:
             self._clients_key = None
             with self._lock:
-                self._state.clients, self._state.clients_error = [], ""
+                self._state.clients, self._state.clients_error, self._state.sites = [], "", []
             return
         key = (active.user_id, active.host, org_id)
         if key == self._clients_key and time.monotonic() - self._clients_at < CLIENTS_INTERVAL:
@@ -211,5 +212,12 @@ class StateManager:
         own_ip = netinfo.interface_ipv4()
         log.debug("online clients: %d (own tunnel ip %s)", len(clients), own_ip or "-")
         clients = [c for c in clients if c.address != own_ip]
+        try:
+            # Lets the tray name sites the tunnel does not connect to (no private resource).
+            sites = PangolinApi(active).list_sites(org_id)
+        except ApiError as exc:
+            sites = []
+            log.info("could not list sites: %s", exc)
         with self._lock:
             self._state.clients, self._state.clients_error = clients, error
+            self._state.sites = sites

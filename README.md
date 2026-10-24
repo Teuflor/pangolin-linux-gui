@@ -17,7 +17,9 @@ Unofficial tray client for [Pangolin](https://pangolin.net) on Linux, modelled o
 - **Connect/Disconnect** from the menu or the status window; if you are not logged in yet, login
   starts first and the connection follows right after
 - **Sites menu** like on Windows: status, connection type (Direct/Relay/Local), endpoint,
-  last seen and latency per site
+  last seen and latency per site. Sites of the organization that the tunnel does not use are
+  listed too; a click explains why (clients only connect to sites with a private resource you
+  may use)
 - **Accounts:** switch, add (login with a one-time code in the browser), log out
 - **Organizations:** switch, even while connected
 - **Status window** with a table of all sites

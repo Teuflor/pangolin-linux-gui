@@ -85,6 +85,14 @@ class OrgClient:
 
 
 @dataclass
+class OrgSite:
+    """A site of the organization (from the REST API), whether or not the tunnel uses it."""
+    site_id: int
+    name: str
+    online: bool
+
+
+@dataclass
 class AppState:
     """Snapshot the UI renders. Produced by state.StateManager."""
     conn: ConnState = ConnState.DISCONNECTED
@@ -94,6 +102,7 @@ class AppState:
     orgs: list[Org] = field(default_factory=list)
     clients: list[OrgClient] = field(default_factory=list)   # online clients except this device
     clients_error: str = ""          # "forbidden" when the role may not list clients, else message
+    sites: list[OrgSite] = field(default_factory=list)       # tunnel sites of the org (API)
     cli_installed: bool = True
     cli_version: str = ""
     last_error: str = ""

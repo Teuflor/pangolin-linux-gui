@@ -11,7 +11,7 @@ from pangolin_gui import api as api_mod
 from pangolin_gui import clipboard, netinfo
 from pangolin_gui import state as state_mod
 from pangolin_gui.api import ApiError, PangolinApi, strip_prefix
-from pangolin_gui.models import Account, AppState, ConnState, OlmStatus, OrgClient
+from pangolin_gui.models import Account, AppState, ConnState, OlmStatus, OrgClient, OrgSite
 from pangolin_gui.state import StateManager
 from pangolin_gui.tray import client_menu_label, clients_signature
 
@@ -128,6 +128,14 @@ def manager(tmp_path, monkeypatch):
                 raise FakeApi.error
             return list(FakeApi.result)
 
+        sites = [OrgSite(3, "Office", True)]
+        sites_error = None
+
+        def list_sites(self, org_id):
+            if FakeApi.sites_error:
+                raise FakeApi.sites_error
+            return list(FakeApi.sites)
+
     monkeypatch.setattr(state_mod, "PangolinApi", FakeApi)
     monkeypatch.setattr(state_mod.cli, "find_cli", lambda: None)
     monkeypatch.setattr(state_mod.netinfo, "interface_ipv4", lambda *a: "100.90.128.2")
@@ -160,6 +168,33 @@ def test_clients_forbidden_reported(manager):
     FakeApi.error = ApiError("forbidden", forbidden=True)
     mgr._poll_once()
     assert seen[-1].clients == [] and seen[-1].clients_error == "forbidden"
+
+
+def test_sites_loaded_with_clients_and_cleared_when_disconnected(manager):
+    mgr, olm, seen, calls, _ = manager
+    mgr._poll_once()
+    assert [s.name for s in seen[-1].sites] == ["Office"]
+    olm.status = None
+    mgr._poll_once()
+    assert seen[-1].sites == []
+
+
+def test_sites_error_does_not_hide_clients(manager):
+    mgr, olm, seen, calls, FakeApi = manager
+    FakeApi.sites_error = ApiError("forbidden", forbidden=True)
+    mgr._poll_once()
+    assert seen[-1].sites == [] and [c.name for c in seen[-1].clients] == ["other"]
+
+
+def test_list_sites_skips_local_and_archived(monkeypatch):
+    route(monkeypatch, {"/sites?": {"sites": [
+        {"siteId": 3, "name": "Office", "online": True, "type": "newt"},
+        {"siteId": 2, "name": "Home", "online": True, "type": "newt"},
+        {"siteId": 4, "name": "pangolin.example", "online": None, "type": "local"},
+        {"siteId": 5, "name": "Old", "online": False, "type": "newt", "archived": True},
+    ]}})
+    sites = PangolinApi(ACCOUNT).list_sites("org1")
+    assert [(s.site_id, s.name, s.online) for s in sites] == [(2, "Home", True), (3, "Office", True)]
 
 
 # -- tray helpers -------------------------------------------------------------------

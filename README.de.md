@@ -18,7 +18,9 @@ darüber.
 - **Verbinden/Trennen** aus dem Menü oder dem Statusfenster; ist man noch nicht angemeldet,
   startet der Login und danach direkt die Verbindung
 - **Sites-Menü** wie unter Windows: Status, Verbindungsart (Direct/Relay/Local), Endpoint,
-  letzter Kontakt und Latenz je Site
+  letzter Kontakt und Latenz je Site. Sites der Organisation, die der Tunnel nicht nutzt, stehen
+  ebenfalls dort; ein Klick erklärt den Grund (Clients verbinden sich nur mit Sites, auf denen es
+  eine private Ressource gibt, die man nutzen darf)
 - **Konten:** wechseln, hinzufügen (Login per Einmal-Code im Browser), abmelden
 - **Organisationen** wechseln, auch bei laufender Verbindung
 - **Statusfenster** mit Tabelle aller Sites

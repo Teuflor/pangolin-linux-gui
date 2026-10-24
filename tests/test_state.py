@@ -68,6 +68,9 @@ def make_manager(accounts_file, olm, monkeypatch, orgs=None):
         def list_online_clients(self, org_id):
             return []
 
+        def list_sites(self, org_id):
+            return []
+
     monkeypatch.setattr(state_mod, "PangolinApi", FakeApi)
     seen = []
     mgr = StateManager(seen.append, olm=olm, accounts_path=accounts_file)
