@@ -8,14 +8,25 @@ funktionieren Login und Verbinden; der Rechner erscheint im Dashboard online.
 
 | Punkt | Stand | Umsetzung |
 |---|---|---|
-| 0 | erledigt, Test auf echtem System offen | `activeuserid` gelesen; genau ein Konto ohne aktives → wird per `pangolin select account` gewählt und verbunden; Login-Dialog füllt die bekannte Server-URL vor; ist die Sitzung abgelaufen, startet der Login direkt für diesen Server, danach wird verbunden |
-| 1 | erledigt, Test auf echtem System offen | eigenes StatusNotifierItem per D-Bus (`sni.py`): Linksklick = Statusfenster, Rechtsklick = Menü, Mittelklick = Verbinden/Trennen; AppIndicator bleibt Fallback (`PANGOLIN_TRAY=gtk`) |
+| 0 | erledigt, auf echtem System geprüft | `activeuserid` gelesen; genau ein Konto ohne aktives → wird per `pangolin select account` gewählt und verbunden; Login-Dialog füllt die bekannte Server-URL vor; ist die Sitzung abgelaufen, startet der Login direkt für diesen Server, danach wird verbunden |
+| 1 | erledigt, auf echtem System geprüft | eigenes StatusNotifierItem per D-Bus (`sni.py`): Linksklick = Statusfenster, Rechtsklick = Menü, Mittelklick = Verbinden/Trennen; AppIndicator bleibt Fallback (`PANGOLIN_TRAY=gtk`). Rechtsklick-Menü war leer, behoben in `1c89180` (siehe Praxistest 2) |
 | 2 | erledigt | „Connect“/„Disconnect“ ist ein normaler Eintrag statt Checkbox; nach jedem Klick wird das Menü aus dem echten Zustand neu gebaut; nach einem über „Connect“ gestarteten Login wird direkt verbunden |
 | 3 | erledigt | „Open Status…“ steht immer oben im Menü; Statusfenster zeigt ohne Verbindung einen Hinweis |
 | 4 | erledigt | kein Handlungsbedarf |
 | 5 | erledigt | Ursache: abgebrochener Login wurde nicht mit `wait()` abgeholt; jetzt immer (Test mit Fake-CLI) |
 | 6 | erledigt | Logzeilen für Start, Tray-Backend, Konten, Organisationen, Verbindungswechsel, jeden CLI-Aufruf (Befehl, Exit-Code, Ausgabe) und API-Aufrufe |
 | 7 | war vorhanden | Einstellungen → „Lokale Routen bevorzugen, wenn verfügbar“ |
+
+## Praxistest 2 (Stand `fdd0948`, 2026-10-23) – erledigt
+
+Gleiches System. Alle Punkte direkt behoben und auf echtem System geprüft:
+
+| Punkt | Commit | Umsetzung |
+|---|---|---|
+| Rechtsklick auf das Tray-Icon zeigt kein Menü | `1c89180` | `sni.py` verpackte die Menüeinträge doppelt als Variant (`v(v(...))`), Plasma verwarf sie; Test prüft jetzt das Wire-Format |
+| `./install.sh` nicht ausführbar | `1c89180` | Dateimodus 100755 |
+| Verbinden fragt jedes Mal nach dem sudo-Passwort | `1280ab6`, `0683b96`, `bfcd458` | optionaler Systemdienst `pangolin-gui@<user>.service` mit Polkit-Freigabe (`install.sh --system-service`); Start/Stopp ohne Passwort, DNS und Heimnetz bleiben lokal, Stoppen räumt sauber auf |
+| `up.override_dns=false` wirkte beim sudo-Weg nicht | `1280ab6` | die CLI gibt den Wert nicht an den root-Prozess weiter; der Systemdienst übergibt alle `up.*`-Werte explizit |
 
 ## 0. Aktives Konto wird nicht erkannt → „Connect“ startet immer wieder den Login
 
