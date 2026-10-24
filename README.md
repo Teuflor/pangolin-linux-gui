@@ -1,126 +1,131 @@
-# Pangolin GUI für Linux
+# Pangolin GUI for Linux
 
-Inoffizieller Tray-Client für [Pangolin](https://pangolin.net) unter Linux, aufgebaut wie der
-offizielle [Windows-Client](https://github.com/fosrl/windows). Die eigentliche Arbeit macht die
-offizielle [Pangolin-CLI](https://github.com/fosrl/cli); diese App ist eine grafische Oberfläche
-darüber.
+**English** · [Deutsch](README.de.md)
 
-> **Status:** Prototyp. Die Unit-Tests laufen; ein echter Test mit Pangolin-Server steht noch aus.
+Unofficial tray client for [Pangolin](https://pangolin.net) on Linux, modelled on the official
+[Windows client](https://github.com/fosrl/windows). The actual work is done by the official
+[Pangolin CLI](https://github.com/fosrl/cli); this app is a graphical front end for it.
 
-## Funktionen
+> **Status:** early release. Tested on an Arch-based system (CachyOS) with KDE Plasma 6 (Wayland)
+> against a self-hosted Pangolin server. Other desktops and distributions are less tested;
+> feedback is welcome.
 
-- **Tray-Icon:** orange bei Verbindung, grau ohne. **Linksklick** öffnet das Statusfenster,
-  **Rechtsklick** das Menü, **Mittelklick** verbindet bzw. trennt
-- **Verbinden/Trennen** aus dem Menü oder dem Statusfenster; ist man noch nicht angemeldet,
-  startet der Login und danach direkt die Verbindung
-- **Sites-Menü** wie unter Windows: Status, Verbindungsart (Direct/Relay/Local), Endpoint,
-  letzter Kontakt und Latenz je Site
-- **Konten:** wechseln, hinzufügen (Login per Einmal-Code im Browser), abmelden
-- **Organisationen** wechseln, auch bei laufender Verbindung
-- **Statusfenster** mit Tabelle aller Sites
-- **Log-Viewer** mit Suche, Auto-Refresh und Farbmarkierung
-- **Online-Clients:** Bei bestehender Verbindung zeigt das Tray-Menü, welche anderen Geräte
-  der Organisation online sind. Ein Klick kopiert deren Tunnel-IP in die Zwischenablage.
-- **Einstellungen:** Sprache, DNS-Optionen der CLI, Log-Level, Autostart, automatisch verbinden
-- **Mehrsprachig:** Deutsch und Englisch, weitere Sprachen per JSON-Datei
-- **Grafische Passwortabfrage** für die Admin-Rechte beim Verbinden
+## Features
 
-Noch nicht enthalten: Auswahl eines Exit-Nodes (die CLI kann Exit-Nodes nur interaktiv auflisten).
+- **Tray icon:** orange when connected, gray when not. **Left click** opens the status window,
+  **right click** the menu, **middle click** connects or disconnects
+- **Connect/Disconnect** from the menu or the status window; if you are not logged in yet, login
+  starts first and the connection follows right after
+- **Sites menu** like on Windows: status, connection type (Direct/Relay/Local), endpoint,
+  last seen and latency per site
+- **Accounts:** switch, add (login with a one-time code in the browser), log out
+- **Organizations:** switch, even while connected
+- **Status window** with a table of all sites
+- **Log viewer** with search, auto-refresh and highlighting
+- **Online clients:** while connected, the tray menu shows which other devices of the
+  organization are online. A click copies their tunnel IP to the clipboard.
+- **Preferences:** language, the CLI's DNS options, log level, autostart, connect automatically
+- **Multilingual:** English and German, more languages via a JSON file
+- **Connect without a password** via an optional systemd service with a polkit rule, or a
+  **graphical password prompt** for the admin rights otherwise
 
-## Abhängigkeiten
+Not included yet: choosing an exit node (the CLI can only list exit nodes interactively).
 
-Die GUI ist reines Python ohne pip-Pakete. Sie braucht nur Systempakete:
+## Dependencies
 
-| Zweck | Arch Linux | Debian / Ubuntu |
+The GUI is plain Python without pip packages. It only needs system packages:
+
+| Purpose | Arch Linux | Debian / Ubuntu |
 |---|---|---|
-| Python 3.10+ | `python` | (vorinstalliert) |
-| GTK-Bindings (PyGObject) | `python-gobject` | `python3-gi` |
+| Python 3.10+ | `python` | (preinstalled) |
+| GTK bindings (PyGObject) | `python-gobject` | `python3-gi` |
 | GTK 3 | `gtk3` | `gir1.2-gtk-3.0` |
-| Tray-Icon (AppIndicator) | `libayatana-appindicator` | `gir1.2-ayatanaappindicator3-0.1` |
-| Admin-Rechte beim Verbinden | `sudo` | (vorinstalliert) |
-| IP in Zwischenablage (Wayland / X11) | `wl-clipboard`, `xclip` | `wl-clipboard`, `xclip` |
-| Pangolin-CLI | AUR `pangolin-bin` oder `get-cli.sh` | `get-cli.sh` |
+| Tray icon (AppIndicator fallback) | `libayatana-appindicator` | `gir1.2-ayatanaappindicator3-0.1` |
+| Admin rights when connecting | `sudo` | (preinstalled) |
+| Copy IPs to the clipboard (Wayland / X11) | `wl-clipboard`, `xclip` | `wl-clipboard`, `xclip` |
+| Pangolin CLI | AUR `pangolin-bin` or `get-cli.sh` | `get-cli.sh` |
 | Tests (optional) | `python-pytest` | `python3-pytest` |
 
-Die Paketlisten stehen auch in [`deps/arch.txt`](deps/arch.txt) und
-[`deps/debian.txt`](deps/debian.txt); `install.sh --deps` liest sie von dort.
+The package lists are also in [`deps/arch.txt`](deps/arch.txt) and
+[`deps/debian.txt`](deps/debian.txt); `install.sh --deps` reads them from there.
 
-## Installation auf Arch Linux
+## Installation on Arch Linux
 
-Gilt auch für Manjaro, EndeavourOS und andere Arch-Ableger.
+Also applies to Manjaro, EndeavourOS, CachyOS and other Arch derivatives.
 
-### 1. Pangolin-CLI installieren
+### 1. Install the Pangolin CLI
 
-Aus dem AUR (mit einem AUR-Helper wie `yay` oder `paru`):
+From the AUR (with an AUR helper such as `yay` or `paru`):
 
 ```bash
 yay -S pangolin-bin
 ```
 
-Alternativ das offizielle Installationsskript
-([Anleitung](https://docs.pangolin.net/manage/clients/install-client)):
+Or with the official install script
+([instructions](https://docs.pangolin.net/manage/clients/install-client)):
 
 ```bash
 curl -fsSL https://static.pangolin.net/get-cli.sh | bash
 ```
 
-Prüfen:
+Check:
 
 ```bash
 pangolin version
 ```
 
-### 2. Repository klonen
+### 2. Clone the repository
 
 ```bash
 git clone https://github.com/Teuflor/pangolin-linux-gui.git
 cd pangolin-linux-gui
 ```
 
-### 3. Abhängigkeiten und Menüeintrag
+### 3. Dependencies and menu entry
 
 ```bash
 ./install.sh --deps
 ```
 
-Das installiert per `sudo pacman -S --needed` die fehlenden Pakete aus `deps/arch.txt` und legt
-einen Eintrag „Pangolin“ im Anwendungsmenü an. Ohne `--deps` zeigt das Skript nur an, was fehlt.
+This installs the missing packages from `deps/arch.txt` with `sudo pacman -S --needed` and adds a
+"Pangolin" entry to the application menu. Without `--deps` the script only shows what is missing.
 
-Von Hand geht es so:
+By hand:
 
 ```bash
 sudo pacman -S --needed python python-gobject gtk3 libayatana-appindicator sudo wl-clipboard xclip
 ```
 
-### Arch-spezifische Hinweise
+### Notes for Arch
 
-- **sudo:** Bei einer minimalen Arch-Installation ist `sudo` oft nicht eingerichtet. Dein
-  Benutzer muss `sudo` nutzen dürfen (z. B. Gruppe `wheel` und `%wheel ALL=(ALL:ALL) ALL` in
-  `visudo`). Sonst schlägt *Connect* fehl, denn die Pangolin-CLI startet den Tunnel per `sudo`.
-- **Tray-Icon je Desktop:**
-  - **KDE Plasma:** funktioniert ohne Zusatz.
-  - **GNOME:** braucht die Erweiterung *AppIndicator and KStatusNotifierItem Support*:
-    `sudo pacman -S gnome-shell-extension-appindicator`, danach abmelden/anmelden und die
-    Erweiterung in *Erweiterungen* aktivieren.
-  - **XFCE:** Panel-Element *Statusbenachrichtigungen* bzw. *Infobereich* zum Panel hinzufügen
-    (seit XFCE 4.16 Teil von `xfce4-panel`).
-  - **Hyprland / Sway / andere Wayland-Compositors:** braucht eine Leiste mit Tray, z. B.
-    Waybar mit dem Modul `tray`.
-  - Ohne Tray öffnet die App ihr Statusfenster; Verbinden und Trennen gehen auch dort.
-- **Benachrichtigungen:** Fehlermeldungen kommen als Desktop-Benachrichtigung. Unter
-  Fenstermanagern ohne Benachrichtigungsdienst `dunst` oder `mako` installieren.
-- **Browser für den Login:** geöffnet wird der Standardbrowser (`xdg-open`). Falls nichts
-  passiert: `xdg-settings set default-web-browser firefox.desktop`.
+- **sudo:** on a minimal Arch install `sudo` is often not set up. Your user must be allowed to use
+  `sudo` (e.g. group `wheel` and `%wheel ALL=(ALL:ALL) ALL` in `visudo`). Otherwise *Connect*
+  fails, because the Pangolin CLI starts the tunnel with `sudo` (unless you install the
+  system service, see below).
+- **Tray icon per desktop:**
+  - **KDE Plasma:** works out of the box.
+  - **GNOME:** needs the extension *AppIndicator and KStatusNotifierItem Support*:
+    `sudo pacman -S gnome-shell-extension-appindicator`, then log out and back in and enable the
+    extension in *Extensions*.
+  - **XFCE:** add the panel item *Status Tray* (*Notification Area* in older versions) to the
+    panel (part of `xfce4-panel` since XFCE 4.16).
+  - **Hyprland / Sway / other Wayland compositors:** need a bar with a tray, e.g. Waybar with
+    the `tray` module.
+  - Without a tray the app opens its status window; connecting and disconnecting work there too.
+- **Notifications:** errors are shown as desktop notifications. Under window managers without a
+  notification daemon, install `dunst` or `mako`.
+- **Browser for login:** the default browser is opened (`xdg-open`). If nothing happens:
+  `xdg-settings set default-web-browser firefox.desktop`.
 
-## Installation auf Debian / Ubuntu
+## Installation on Debian / Ubuntu
 
-1. Pangolin-CLI installieren:
+1. Install the Pangolin CLI:
 
    ```bash
    curl -fsSL https://static.pangolin.net/get-cli.sh | bash
    ```
 
-2. Repository klonen und installieren:
+2. Clone the repository and install:
 
    ```bash
    git clone https://github.com/Teuflor/pangolin-linux-gui.git
@@ -128,109 +133,109 @@ sudo pacman -S --needed python python-gobject gtk3 libayatana-appindicator sudo 
    ./install.sh --deps
    ```
 
-   Das installiert per `sudo apt-get` die Pakete aus `deps/debian.txt`.
+   This installs the packages from `deps/debian.txt` with `sudo apt-get`.
 
-3. **GNOME (Standard-Ubuntu):** Die Erweiterung *AppIndicator and KStatusNotifierItem Support*
-   ist meist schon aktiv, sonst:
+3. **GNOME (default Ubuntu):** the extension *AppIndicator and KStatusNotifierItem Support* is
+   usually already active, otherwise:
 
    ```bash
    sudo apt install gnome-shell-extension-appindicator
    ```
 
-## Weitere Optionen von install.sh
+## More install.sh options
 
 ```bash
-./install.sh --autostart               # beim Anmelden im Tray starten
-./install.sh --system-service          # Verbinden ohne Passwort (siehe unten)
-./install.sh --remove-system-service   # wieder zurück zur sudo-Abfrage
-./install.sh --uninstall               # Menüeintrag, Icon und Autostart entfernen
+./install.sh --autostart               # start in the tray at login
+./install.sh --system-service          # connect without a password (see below)
+./install.sh --remove-system-service   # back to the sudo password prompt
+./install.sh --uninstall               # remove menu entry, icon and autostart entry
 ```
 
-Das Repo bleibt an seinem Ort; Menüeintrag und Autostart zeigen auf `bin/pangolin-gui` im
-geklonten Ordner. Nach `git pull` ist die neue Version sofort aktiv.
+The repository stays where it is; the menu entry and autostart point to `bin/pangolin-gui` in
+the cloned folder. After `git pull` the new version is active right away.
 
-### Verbinden ohne Passwort (Systemdienst)
+### Connect without a password (system service)
 
-Den Tunnel kann nur root einrichten. Ohne weitere Einrichtung fragt die CLI deshalb bei jedem
-Verbinden per `sudo` nach dem Passwort. `./install.sh --system-service` richtet stattdessen
-einmalig (mit `sudo`) Folgendes ein:
+Only root can set up the tunnel, so without further setup the CLI asks for your password with
+`sudo` every time you connect. `./install.sh --system-service` instead sets up the following
+once (with `sudo`):
 
-| Datei | Zweck |
+| File | Purpose |
 |---|---|
-| `/usr/local/bin/pangolin` | Pangolin-CLI, root-gehörend (wird aus `~/.local/bin` verschoben; ein Paket in `/usr/bin` wird direkt genutzt) |
-| `/usr/local/lib/pangolin-gui/pangolin-gui-client` | Startprogramm des Dienstes (Kopie von `system/pangolin-gui-client`) |
-| `/etc/systemd/system/pangolin-gui@.service` | systemd-Dienst `pangolin-gui@<user>.service`, nicht beim Booten aktiv |
-| `/etc/polkit-1/rules.d/50-pangolin-gui.rules` | erlaubt dem angemeldeten Benutzer, **nur seinen eigenen** Dienst ohne Passwort zu starten, stoppen und neu zu starten |
+| `/usr/local/bin/pangolin` | Pangolin CLI, owned by root (moved from `~/.local/bin`; a package in `/usr/bin` is used directly) |
+| `/usr/local/lib/pangolin-gui/pangolin-gui-client` | start helper of the service (copy of `system/pangolin-gui-client`) |
+| `/etc/systemd/system/pangolin-gui@.service` | systemd service `pangolin-gui@<user>.service`, not started at boot |
+| `/etc/polkit-1/rules.d/50-pangolin-gui.rules` | lets the logged-in user start, stop and restart **only their own** service without a password |
 
-Danach startet *Verbinden* den Dienst per `systemctl`, *Trennen* stoppt ihn. Fehlt die
-Polkit-Freigabe, fällt die GUI auf die sudo-Abfrage zurück. Beim Herunterfahren stoppt systemd
-den Dienst sauber, DNS und Routen werden zurückgesetzt.
+After that, *Connect* starts the service with `systemctl` and *Disconnect* stops it. If the
+polkit rule is missing, the GUI falls back to the sudo prompt. At shutdown systemd stops the
+service cleanly, so DNS and routes are restored.
 
-Sicherheit: Das Startprogramm läuft als root und liest nur das aktive Konto
-(`accounts.json`) und die `up.*`-Einstellungen (`config.json`) aus `~/.config/pangolin/`,
-und nur aus regulären Dateien des Benutzers (keine Symlinks). Es prüft jeden Wert und startet
-ausschließlich `pangolin up client`, ohne Shell. Das Client-Secret steht wie beim sudo-Weg der
-CLI in der Befehlszeile (für lokale Benutzer in `ps` sichtbar). Ein Programm, das unter dem
-eigenen Benutzer läuft, kann damit ohne
-Passwort den Tunnel ein- und ausschalten und über die eigenen Konto-Dateien das Ziel des Tunnels
-ändern, aber keine anderen Befehle als root ausführen. Ein `sudoers`-Eintrag ohne Passwort ist
-dagegen **nicht** zu empfehlen: Die CLI ruft `sudo sh -c "…"` auf, eine solche Freigabe würde
-beliebige Befehle als root erlauben.
+Security: the start helper runs as root and only reads the active account (`accounts.json`)
+and the `up.*` settings (`config.json`) from `~/.config/pangolin/`, and only from regular files
+owned by the user (no symlinks). It validates every value and runs nothing but
+`pangolin up client`, without a shell. As with the CLI's own sudo path, the client secret is on
+the command line (visible to local users in `ps`). A program running as your user can therefore
+switch the tunnel on and off without a password and change the tunnel's target through your own
+account files, but it cannot run any other command as root. A passwordless `sudoers` entry is
+**not** recommended instead: the CLI runs `sudo sh -c "…"`, so such a rule would allow any
+command as root.
 
-Nach einem Update der GUI, das `system/` ändert, `./install.sh --system-service` erneut
-ausführen; nach `pangolin update` ebenso, falls die CLI dabei wieder in `~/.local/bin` landet.
+After a GUI update that changes `system/`, run `./install.sh --system-service` again; likewise
+after `pangolin update` if the CLI ends up in `~/.local/bin` again.
 
-## Starten
+## Running
 
 ```bash
-./bin/pangolin-gui            # Statusfenster öffnen, Icon im Tray
-./bin/pangolin-gui --hidden   # nur Tray (für Autostart)
-./bin/pangolin-gui --debug    # ausführliche Logs im Terminal
+./bin/pangolin-gui            # open the status window, icon in the tray
+./bin/pangolin-gui --hidden   # tray only (for autostart)
+./bin/pangolin-gui --debug    # verbose logs in the terminal
 ```
 
-Ein zweiter Aufruf startet keine zweite Instanz, sondern holt das Statusfenster nach vorne.
+Starting it a second time does not open a second instance but brings the status window to the
+front.
 
-### Tray-Icon und Klicks
+### Tray icon and clicks
 
-Die App meldet ihr Icon selbst per D-Bus als *StatusNotifierItem* an (KDE Plasma, GNOME mit
-AppIndicator-Erweiterung, XFCE, Waybar):
+The app registers its icon itself over D-Bus as a *StatusNotifierItem* (KDE Plasma, GNOME with
+the AppIndicator extension, XFCE, Waybar):
 
-| Klick | Wirkung |
+| Click | Action |
 |---|---|
-| Links | Statusfenster öffnen bzw. nach vorne holen |
-| Rechts | Menü |
-| Mitte | Verbinden / Trennen |
+| Left | open the status window or bring it to the front |
+| Right | menu |
+| Middle | connect / disconnect |
 
-Läuft kein StatusNotifier-Dienst, nutzt die App AppIndicator. Dort öffnen Links- und
-Rechtsklick das Menü; das Statusfenster erreicht man über *Open Status…* oder den Mittelklick.
-Das Backend lässt sich erzwingen:
+If no StatusNotifier service is running, the app uses AppIndicator. There, left and right click
+both open the menu; the status window is reachable via *Open Status…* or the middle click.
+You can force the backend:
 
 ```bash
-PANGOLIN_TRAY=gtk ./bin/pangolin-gui   # AppIndicator statt eigenem D-Bus-Icon
-PANGOLIN_TRAY=sni ./bin/pangolin-gui   # eigenes D-Bus-Icon erzwingen
+PANGOLIN_TRAY=gtk ./bin/pangolin-gui   # AppIndicator instead of the own D-Bus icon
+PANGOLIN_TRAY=sni ./bin/pangolin-gui   # force the own D-Bus icon
 ```
 
 ### Logs
 
-Die GUI schreibt nach stderr: Start (Sprache, CLI-Pfad, Tray-Backend), geladene Konten und
-Organisationen, Verbindungswechsel, Login. Mit `--debug` zusätzlich jeden CLI-Aufruf samt
-Exit-Code und letzter Ausgabe sowie jeden API-Aufruf mit HTTP-Status. Passwörter, Sitzungs-Token
-und Login-Codes landen nie im Log.
+The GUI logs to stderr: startup (language, CLI path, tray backend), loaded accounts and
+organizations, connection changes, login. With `--debug` it also logs every CLI call with exit
+code and last output, and every API call with its HTTP status. Passwords, session tokens and
+login codes never end up in the log.
 
-## Sprache
+## Language
 
-Unter *Einstellungen… → Sprache* stehen zur Wahl:
+*Preferences… → Language* offers:
 
-- **Systemstandard:** folgt der Desktop-Sprache (`LANGUAGE`/`LANG`, z. B. `de_DE.UTF-8` → Deutsch)
+- **System default:** follows the desktop language (`LANGUAGE`/`LANG`, e.g. `de_DE.UTF-8` → German)
 - **English**
 - **Deutsch**
 
-Die Umstellung wirkt sofort: Tray-Menü und offene Fenster werden in der neuen Sprache neu
-aufgebaut. Auch der Passwortdialog für `sudo` folgt der Einstellung.
+The change takes effect immediately: the tray menu and open windows are rebuilt in the new
+language. The password prompt for `sudo` follows the setting too.
 
-### Weitere Sprache hinzufügen
+### Adding a language
 
-Jede Sprache ist eine Datei `pangolin_gui/locales/<code>.json`, z. B. `fr.json`:
+Each language is a file `pangolin_gui/locales/<code>.json`, e.g. `fr.json`:
 
 ```json
 {
@@ -242,101 +247,100 @@ Jede Sprache ist eine Datei `pangolin_gui/locales/<code>.json`, z. B. `fr.json`:
 }
 ```
 
-Eine Vorlage mit allen Texten erzeugt das Prüfwerkzeug:
+The check tool creates a template with all strings:
 
 ```bash
 echo '{"name": "Français", "strings": {}}' > pangolin_gui/locales/fr.json
-python3 tools/i18n_check.py --update   # trägt alle Texte (leer) in jede Sprachdatei ein
-python3 tools/i18n_check.py            # zeigt fehlende Übersetzungen und Platzhalterfehler
+python3 tools/i18n_check.py --update   # adds all strings (empty) to every language file
+python3 tools/i18n_check.py            # shows missing translations and placeholder errors
 ```
 
-Platzhalter wie `{version}` oder `{ip}` müssen in der Übersetzung erhalten bleiben. Fehlende
-Einträge erscheinen auf Englisch. Die neue Sprache taucht automatisch in den Einstellungen auf.
+Placeholders such as `{version}` or `{ip}` must be kept in the translation. Missing entries are
+shown in English. The new language appears in the preferences automatically.
 
-## Online-Clients
+## Online clients
 
-Bei bestehender Verbindung gibt es im Tray das Untermenü **Online-Clients (n)**. Es listet die
-anderen Geräte der aktuellen Organisation, die gerade online sind, jeweils mit Name und Tunnel-IP
-(z. B. `laptop-anna · 100.90.128.7`). Bei Benutzergeräten zeigt der Tooltip den Besitzer.
+While connected, the tray has a submenu **Online Clients (n)**. It lists the other devices of
+the current organization that are online, each with name and tunnel IP
+(e.g. `laptop-anna · 100.90.128.7`). For user devices the tooltip shows the owner.
 
-- **Klick auf einen Eintrag** kopiert die IP in die Zwischenablage, mit Bestätigung als
-  Benachrichtigung.
-- **Aktualisieren** lädt die Liste sofort neu; sonst wird sie alle 30 Sekunden abgefragt, und nur
-  solange eine Verbindung besteht.
-- Das eigene Gerät wird anhand der IP der Schnittstelle `pangolin` ausgeblendet.
+- **Clicking an entry** copies the IP to the clipboard and confirms it with a notification.
+- **Refresh** reloads the list right away; otherwise it is fetched every 30 seconds, and only
+  while connected.
+- Your own device is hidden based on the IP of the `pangolin` interface.
 
-**Berechtigung:** Die Liste kommt aus der Pangolin-API (`/org/{orgId}/clients` und
-`/org/{orgId}/user-devices`). Beide verlangen die Berechtigung *listClients*, die in Pangolin
-standardmäßig Admins haben. Ohne diese Berechtigung zeigt das Menü
-„Keine Berechtigung, Clients aufzulisten“. Ein Admin kann der eigenen Rolle das Recht geben.
+**Permission:** the list comes from the Pangolin API (`/org/{orgId}/clients` and
+`/org/{orgId}/user-devices`). Both require the *listClients* permission, which admins have by
+default in Pangolin. Without it, the menu shows "Your role may not list clients". An admin can
+grant the permission to your role.
 
-**Zwischenablage:** Eine Tray-App hat beim Menüklick keinen Fokus. Unter Wayland setzen viele
-Compositors die Zwischenablage dann nicht per GTK. Deshalb nutzt die App `wl-copy`
-(Paket `wl-clipboard`) bzw. unter X11 `xclip`, wenn vorhanden; `install.sh --deps` installiert
-beide.
+**Clipboard:** a tray app has no focus when a menu item is clicked. Under Wayland many
+compositors then do not accept the clipboard from GTK. The app therefore uses `wl-copy`
+(package `wl-clipboard`) or `xclip` under X11 when available; `install.sh --deps` installs both.
 
-## Testanleitung für den ersten Lauf
+## First-run test guide
 
-1. `./bin/pangolin-gui --debug` im Terminal starten. Fehler erscheinen dann dort.
-2. **Anmelden:** Tray → *Log In…* (oder Verbinden im Statusfenster) → Cloud oder eigenen Server
-   wählen → Code kopieren → *Open browser* → im Browser bestätigen.
-3. **Organisation:** Tray → *Organization* sollte deine Organisationen zeigen.
-4. **Verbinden:** Tray → *Connect*. Es erscheint ein Passwortdialog für `sudo`. Danach wechselt
-   der Status über *Registering…* zu *Connected*, das Icon wird orange.
-5. **Sites:** Tray → *Sites* und *Open Status…* sollten die Sites mit Latenz zeigen.
-6. **Logs:** Tray → *Logs…*
-7. **Trennen:** Tray → *Disconnect*.
+1. Start `./bin/pangolin-gui --debug` in a terminal so errors show up there.
+2. **Log in:** tray → *Log In…* (or Connect in the status window) → choose Cloud or your own
+   server → copy the code → *Open browser* → confirm in the browser.
+3. **Organization:** tray → *Organization* should list your organizations.
+4. **Connect:** tray → *Connect*. Without the system service a password prompt for `sudo`
+   appears. The status then changes via *Registering…* to *Connected* and the icon turns orange.
+5. **Sites:** tray → *Sites* and *Open Status…* should show the sites with latency.
+6. **Logs:** tray → *Logs…*
+7. **Disconnect:** tray → *Disconnect*.
 
-Gegenprobe in einem Terminal: `pangolin status client` sollte dasselbe zeigen wie die GUI.
+Cross-check in a terminal: `pangolin status client` should show the same as the GUI.
 
-Bitte bei Problemen die Terminal-Ausgabe von `--debug` und `pangolin logs client -n 100`
-festhalten.
+If something goes wrong, please keep the terminal output of `--debug` and
+`pangolin logs client -n 100`.
 
-## So funktioniert es
+## How it works
 
-| Aufgabe | Umsetzung |
+| Task | Implementation |
 |---|---|
-| Status | HTTP über den Unix-Socket `/var/run/olm.sock` (`GET /status`), alle 2 s abgefragt |
-| Verbinden | Mit Systemdienst: `systemctl start pangolin-gui@<user>.service` (ohne Passwort, siehe oben). Sonst `pangolin up client --silent`: Die CLI startet den Tunnel-Dienst per `sudo`; ohne Terminal fragt `sudo` über `bin/pangolin-gui-askpass` (GTK-Passwortdialog) |
-| Trennen | Mit Systemdienst: `systemctl stop …`, sonst `pangolin down client` |
-| Konten | `~/.config/pangolin/accounts.json` (nur lesend) |
-| Organisationen | REST-API `GET /api/v1/user/{id}/orgs` mit der Session der CLI |
-| Anmeldung | `pangolin auth login <host>` in einem Pseudo-Terminal; die GUI zeigt den Code an |
-| Einstellungen | `pangolin config set up.* …`, GUI-eigene Werte in `~/.config/pangolin-gui/` |
+| Status | HTTP over the Unix socket `/var/run/olm.sock` (`GET /status`), polled every 2 s |
+| Connect | With the system service: `systemctl start pangolin-gui@<user>.service` (no password, see above). Otherwise `pangolin up client --silent`: the CLI starts the tunnel with `sudo`; without a terminal, `sudo` asks via `bin/pangolin-gui-askpass` (GTK password dialog) |
+| Disconnect | With the system service: `systemctl stop …`, otherwise `pangolin down client` |
+| Accounts | `~/.config/pangolin/accounts.json` (read only) |
+| Organizations | REST API `GET /api/v1/user/{id}/orgs` with the CLI's session |
+| Login | `pangolin auth login <host>` in a pseudo terminal; the GUI shows the code |
+| Preferences | `pangolin config set up.* …`, the GUI's own values in `~/.config/pangolin-gui/` |
 
-Das Passwort aus dem Dialog geht nur an `sudo` und wird weder gespeichert noch geloggt.
-Wer ohne Passwortabfrage verbinden will, nutzt den Systemdienst (`./install.sh --system-service`),
-keinen `sudoers`-Eintrag.
+The password from the dialog only goes to `sudo` and is neither stored nor logged. To connect
+without a password, use the system service (`./install.sh --system-service`), not a `sudoers`
+entry.
 
-Details zum Aufbau stehen in [`ARCHITECTURE.md`](ARCHITECTURE.md).
+Architecture details (in German) are in [`ARCHITECTURE.md`](ARCHITECTURE.md).
 
-## Projektstruktur
+## Project structure
 
 ```
-bin/pangolin-gui            Startskript
-bin/pangolin-gui-askpass    Passwortdialog für sudo
+bin/pangolin-gui            start script
+bin/pangolin-gui-askpass    password dialog for sudo
 pangolin_gui/
-  app.py                    Gtk.Application und Controller
-  state.py                  Polling, Zustand für die UI
-  cli.py                    Aufrufe der Pangolin-CLI, Login im Pseudo-Terminal
-  service.py                Systemdienst-Modus: systemctl start/stop
-  olm_socket.py             Client für den Tunnel-Dienst (Unix-Socket)
-  api.py                    REST-API (Organisationen)
-  accounts.py               Konten und Konfiguration der CLI lesen
-  tray.py                   Menüinhalt (build_menu_model) und Wahl des Tray-Backends
-  menu_model.py             Toolkit-neutrales Menümodell
-  sni.py                    Tray-Icon per D-Bus (StatusNotifierItem + dbusmenu)
-  tray_gtk.py               Fallback: AppIndicator / Gtk.StatusIcon
-  i18n.py                   Übersetzungen (_() und N_())
-  locales/de.json           Deutsche Texte
-  clipboard.py, netinfo.py  Zwischenablage, eigene Tunnel-IP
-  windows/                  Status, Logs, Einstellungen, Login
-system/                     Systemdienst: Startprogramm (läuft als root), systemd-Unit, Polkit-Regel
-tools/i18n_check.py         Texte sammeln, Sprachdateien prüfen
+  app.py                    Gtk.Application and controller
+  state.py                  polling, state for the UI
+  cli.py                    calls to the Pangolin CLI, login in a pseudo terminal
+  service.py                system service mode: systemctl start/stop
+  olm_socket.py             client for the tunnel daemon (Unix socket)
+  api.py                    REST API (organizations)
+  accounts.py               read the CLI's accounts and configuration
+  tray.py                   menu content (build_menu_model) and choice of tray backend
+  menu_model.py             toolkit-neutral menu model
+  sni.py                    tray icon over D-Bus (StatusNotifierItem + dbusmenu)
+  tray_gtk.py               fallback: AppIndicator / Gtk.StatusIcon
+  i18n.py                   translations (_() and N_())
+  locales/de.json           German strings
+  clipboard.py, netinfo.py  clipboard, own tunnel IP
+  windows/                  status, logs, preferences, login
+system/                     system service: start helper (runs as root), systemd unit, polkit rule
+data/icons/                 tray icons (sources in data/icons/src/)
+tools/i18n_check.py         collect strings, check language files
 tests/                      pytest
-deps/arch.txt               Paketliste Arch
-deps/debian.txt             Paketliste Debian/Ubuntu
-install.sh                  Abhängigkeiten, Menüeintrag, Autostart
+deps/arch.txt               package list Arch
+deps/debian.txt             package list Debian/Ubuntu
+install.sh                  dependencies, menu entry, autostart, system service
 ```
 
 ## Tests
@@ -347,29 +351,30 @@ sudo apt install python3-pytest   # Debian/Ubuntu
 python3 -m pytest
 ```
 
-Die Tests brauchen weder GTK noch die Pangolin-CLI noch einen Server.
+The tests need neither GTK nor the Pangolin CLI nor a server.
 
-## Fehlersuche
+## Troubleshooting
 
-| Problem | Lösung |
+| Problem | Solution |
 |---|---|
-| `Namespace Gtk not available` | `gtk3` + `python-gobject` (Arch) bzw. `gir1.2-gtk-3.0` (Debian) fehlen |
-| Kein Tray-Icon, nur Statusfenster | Desktop hat keinen Tray, siehe Hinweise oben |
-| Tray-Icon fehlt oder reagiert falsch | Log-Zeile `tray backend: …` prüfen; testweise `PANGOLIN_TRAY=gtk` |
-| *Connect*: „Authentication failed or was cancelled“ | Passwort falsch oder Benutzer darf kein `sudo` |
-| *Connect* hängt bei *Registering…* | `pangolin logs client -n 100` prüfen; Server erreichbar? |
-| Organisationen bleiben leer | Session abgelaufen: Tray → *Account* → *Add Account…* |
-| Online-Clients: „Keine Berechtigung …“ | Rolle hat kein *listClients*, siehe Abschnitt Online-Clients |
-| IP wird nicht kopiert | `wl-clipboard` (Wayland) bzw. `xclip` (X11) installieren |
-| Sprache wechselt nicht | *Speichern* in den Einstellungen klicken; bei „Systemstandard“ `echo $LANG` prüfen |
-| „No permission to access /var/run/olm.sock“ | Socket gehört root; bitte melden, mit `ls -l /var/run/olm.sock` |
+| `Namespace Gtk not available` | `gtk3` + `python-gobject` (Arch) or `gir1.2-gtk-3.0` (Debian) are missing |
+| No tray icon, only the status window | the desktop has no tray, see the notes above |
+| Tray icon missing or reacting wrongly | check the log line `tray backend: …`; try `PANGOLIN_TRAY=gtk` |
+| *Connect*: "Authentication failed or was cancelled" | wrong password or the user may not use `sudo` |
+| *Connect* with system service: "The tunnel service stopped right after starting" | `journalctl -u pangolin-gui@$USER` shows the reason; after a GUI update run `./install.sh --system-service` again |
+| *Connect* hangs at *Registering…* | check `pangolin logs client -n 100`; is the server reachable? |
+| Organizations stay empty | session expired: tray → *Account* → *Add Account…* |
+| Online clients: "Your role may not list clients" | the role lacks *listClients*, see Online clients |
+| IP is not copied | install `wl-clipboard` (Wayland) or `xclip` (X11) |
+| Language does not change | click *Save* in the preferences; with "System default" check `echo $LANG` |
+| "No permission to access /var/run/olm.sock" | the socket belongs to root; please report it with `ls -l /var/run/olm.sock` |
 
-## Lizenz und Marken
+## License and trademarks
 
-Dieses Projekt steht unter der [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
+This project is licensed under the [GNU Affero General Public License v3.0](LICENSE) (AGPL-3.0).
 
-Pangolin und das Pangolin-Logo sind Marken von Fossorial, Inc. Dieses Projekt ist ein
-inoffizieller Client, nicht von Fossorial entwickelt und steht in keiner Verbindung zu
-Fossorial. Es nutzt weder das Pangolin-Logo noch Code von Fossorial; die eigentliche Arbeit
-macht die separat installierte offizielle [Pangolin-CLI](https://github.com/fosrl/cli).
-Die Tray-Icons sind eigene Entwürfe (Quellen in `data/icons/src/`).
+Pangolin and the Pangolin logo are trademarks of Fossorial, Inc. This project is an unofficial
+client, not developed by Fossorial and not affiliated with Fossorial. It uses neither the
+Pangolin logo nor code from Fossorial; the actual work is done by the separately installed
+official [Pangolin CLI](https://github.com/fosrl/cli). The tray icons are original designs
+(sources in `data/icons/src/`).
