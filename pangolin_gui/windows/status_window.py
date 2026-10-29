@@ -100,6 +100,7 @@ class StatusWindow(Gtk.Window):
             (_("Organization"), "Organization"),
             (_("Version"), "Version"),
             (_("Exit node"), "Exit node"),
+            (_("Own IP"), "Own IP"),
         )):
             name = Gtk.Label(label=label_text, xalign=0)
             name.get_style_context().add_class("dim-label")
@@ -107,6 +108,12 @@ class StatusWindow(Gtk.Window):
             grid.attach(name, 0, row, 1, 1)
             grid.attach(value, 1, row, 1, 1)
             self._values[key] = value
+        # Own tunnel IP with a copy button (same row as the "Own IP" label)
+        self.copy_ip_button = Gtk.Button(label=_("Copy"), halign=Gtk.Align.START)
+        self.copy_ip_button.get_style_context().add_class("flat")
+        self.copy_ip_button.connect("clicked", self._on_copy_ip)
+        grid.attach(self.copy_ip_button, 2, row, 1, 1)
+        self._own_ip = ""
 
         self.action_button = Gtk.Button(label=_("Connect"), valign=Gtk.Align.START)
         self.action_button.connect("clicked", self._on_action)
@@ -150,6 +157,10 @@ class StatusWindow(Gtk.Window):
         self.hide()
         return True
 
+    def _on_copy_ip(self, _button):
+        if self._own_ip:
+            self.controller.copy_client_ip(self._own_ip, _("this device"))
+
     def _on_action(self, _button):
         if self._conn in (ConnState.CONNECTED, ConnState.CONNECTING):
             self.controller.disconnect()
@@ -183,6 +194,9 @@ class StatusWindow(Gtk.Window):
         else:
             exit_node_text = _("None")
         self._values["Exit node"].set_text(exit_node_text)
+        self._own_ip = state.own_ip if state.conn == ConnState.CONNECTED else ""
+        self._values["Own IP"].set_text(self._own_ip or "–")
+        self.copy_ip_button.set_sensitive(bool(self._own_ip))
 
         errors = [e for e in (state.last_error, state.status.error_message if state.status else "") if e]
         if errors:

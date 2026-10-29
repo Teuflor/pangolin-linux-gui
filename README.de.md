@@ -27,6 +27,7 @@ darüber.
 - **Log-Viewer** mit Suche, Auto-Refresh und Farbmarkierung
 - **Online-Clients:** Bei bestehender Verbindung zeigt das Tray-Menü, welche anderen Geräte
   der Organisation online sind. Ein Klick kopiert deren Tunnel-IP in die Zwischenablage.
+- **Eigene IP:** im Tray und im Statusfenster sichtbar, solange verbunden; ein Klick kopiert sie.
 - **Einstellungen:** Sprache, DNS-Optionen der CLI, Log-Level, Autostart, automatisch verbinden
 - **Mehrsprachig:** Deutsch und Englisch, weitere Sprachen per JSON-Datei
 - **Verbinden ohne Passwort** über einen optionalen systemd-Dienst mit Polkit-Regel, sonst
@@ -272,12 +273,20 @@ anderen Geräte der aktuellen Organisation, die gerade online sind, jeweils mit 
   Benachrichtigung.
 - **Aktualisieren** lädt die Liste sofort neu; sonst wird sie alle 30 Sekunden abgefragt, und nur
   solange eine Verbindung besteht.
-- Das eigene Gerät wird anhand der IP der Schnittstelle `pangolin` ausgeblendet.
+- **Dieses Gerät** steht ganz oben, markiert mit `(dieses Gerät)`, damit sich auch die eigene IP
+  von hier kopieren lässt. Erkannt wird es an der IP der Schnittstelle `pangolin`; die Zahl im
+  Titel zählt nur die anderen Geräte.
+
+**Eigene IP:** Bei bestehender Verbindung zeigt das Tray direkt unter der Statuszeile
+**Dieses Gerät: 100.90.x.y**, und das Statusfenster hat eine Zeile **Eigene IP** mit dem Knopf
+**Kopieren**. Beides kopiert die Tunnel-IP in die Zwischenablage. Die IP wird lokal von der
+Schnittstelle `pangolin` gelesen und funktioniert daher ohne API-Berechtigung.
 
 **Berechtigung:** Die Liste kommt aus der Pangolin-API (`/org/{orgId}/clients` und
 `/org/{orgId}/user-devices`). Beide verlangen die Berechtigung *listClients*, die in Pangolin
 standardmäßig Admins haben. Ohne diese Berechtigung zeigt das Menü
-„Keine Berechtigung, Clients aufzulisten“. Ein Admin kann der eigenen Rolle das Recht geben.
+„Keine Berechtigung, Clients aufzulisten“ – das eigene Gerät steht trotzdem in der Liste. Ein
+Admin kann der eigenen Rolle das Recht geben.
 
 **Zwischenablage:** Eine Tray-App hat beim Menüklick keinen Fokus. Unter Wayland setzen viele
 Compositors die Zwischenablage dann nicht per GTK. Deshalb nutzt die App `wl-copy`

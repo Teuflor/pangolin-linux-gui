@@ -82,6 +82,7 @@ class OrgClient:
     address: str                     # tunnel IP without prefix length, e.g. "100.90.128.5"
     online: bool
     owner: str = ""                  # user email/username for user devices, "" for machine clients
+    is_self: bool = False            # this computer (matched by its tunnel IP)
 
 
 @dataclass
@@ -100,9 +101,10 @@ class AppState:
     accounts: list[Account] = field(default_factory=list)
     active_account: Optional[Account] = None
     orgs: list[Org] = field(default_factory=list)
-    clients: list[OrgClient] = field(default_factory=list)   # online clients except this device
+    clients: list[OrgClient] = field(default_factory=list)   # online clients, this device first
     clients_error: str = ""          # "forbidden" when the role may not list clients, else message
     sites: list[OrgSite] = field(default_factory=list)       # tunnel sites of the org (API)
+    own_ip: str = ""                 # tunnel IP of this computer while connected
     cli_installed: bool = True
     cli_version: str = ""
     last_error: str = ""

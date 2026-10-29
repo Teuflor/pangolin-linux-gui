@@ -177,14 +177,15 @@ def compute_menu_signature(state: AppState) -> tuple:
 def clients_signature(state: AppState) -> tuple:
     if state.conn != ConnState.CONNECTED:
         return ()
-    return (state.clients_error,
-            tuple((c.client_id, c.name, c.address, c.owner) for c in state.clients),
+    return (state.clients_error, state.own_ip,
+            tuple((c.client_id, c.name, c.address, c.owner, c.is_self) for c in state.clients),
             tuple((s.site_id, s.name, s.online) for s in state.sites))
 
 
 def client_menu_label(client: OrgClient) -> str:
     """Menu text for an online client, e.g. "laptop-anna  ·  100.90.128.7"."""
-    return f"{client.name}  ·  {client.address}"
+    name = _("{name} (this device)").format(name=client.name) if client.is_self else client.name
+    return f"{name}  ·  {client.address}"
 
 
 # Alias
@@ -208,6 +209,11 @@ def build_menu_model(state: AppState, controller: Any) -> list[MenuNode]:
         return nodes
 
     nodes.append(MenuNode("status", get_status_label(state), kind=LABEL))
+    if state.conn == ConnState.CONNECTED and state.own_ip:
+        # Right under "Connected": this computer's tunnel IP, click copies it.
+        nodes.append(MenuNode("own_ip", _("This device: {ip}").format(ip=state.own_ip),
+                              tooltip=_("Click to copy the IP address"),
+                              action=lambda ip=state.own_ip: c.copy_client_ip(ip, _("this device"))))
     busy = state.conn in (ConnState.CONNECTING, ConnState.DISCONNECTING)
     if state.conn in (ConnState.CONNECTED, ConnState.CONNECTING, ConnState.DISCONNECTING):
         # A plain item, not a checkbox: its text always says what a click will do.
@@ -263,17 +269,19 @@ def _sites_node(state: AppState, c: Any) -> MenuNode:
 
 
 def _clients_node(state: AppState, c: Any) -> MenuNode:
-    count = len(state.clients)
+    others = [cl for cl in state.clients if not cl.is_self]
+    count = len(others)
     title = _("Online Clients ({count})").format(count=count) if count else _("Online Clients")
     children: list[MenuNode] = []
-    if state.clients:
+    if state.clients:  # this device is listed too, so its IP can be copied from here
         children.append(MenuNode("clients:hint", _("Click to copy the IP address"), kind=LABEL))
         children.append(separator("clients:sep"))
         for client in state.clients:
+            node_id = "client:self" if client.is_self else f"client:{client.client_id}"
             children.append(MenuNode(
-                f"client:{client.client_id}", client_menu_label(client), tooltip=client.owner,
+                node_id, client_menu_label(client), tooltip=client.owner,
                 action=lambda ip=client.address, name=client.name: c.copy_client_ip(ip, name)))
-    else:
+    if not others:
         if state.clients_error == "forbidden":
             text = _("Your role may not list clients")
         elif state.clients_error:

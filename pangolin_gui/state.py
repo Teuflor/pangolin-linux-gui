@@ -2,6 +2,8 @@
 from __future__ import annotations
 
 import copy
+import socket
+from dataclasses import replace
 import logging
 import threading
 import time
@@ -11,7 +13,7 @@ from typing import Callable, Optional
 from pangolin_gui import accounts, cli, netinfo
 from pangolin_gui.api import ApiError, PangolinApi
 from pangolin_gui.i18n import _
-from pangolin_gui.models import AppState, ConnState, OlmStatus
+from pangolin_gui.models import AppState, ConnState, OlmStatus, OrgClient
 from pangolin_gui.olm_socket import OlmClient, OlmError
 
 log = logging.getLogger(__name__)
@@ -33,6 +35,20 @@ def derive_conn(status: Optional[OlmStatus], transition: Optional[ConnState]) ->
     return ConnState.CONNECTING
 
 
+def with_self(clients: list[OrgClient], own_ip: str, hostname: str) -> list[OrgClient]:
+    """Mark this computer in the client list (first entry) so its IP can be copied too.
+
+    Without permission to list clients the API returns nothing; this device is still
+    added from its local tunnel IP.
+    """
+    if not own_ip:
+        return list(clients)
+    mine = next((c for c in clients if c.address == own_ip), None)
+    me = replace(mine, is_self=True) if mine else OrgClient(
+        client_id=0, name=hostname or "localhost", address=own_ip, online=True, is_self=True)
+    return [me] + [c for c in clients if c.address != own_ip]
+
+
 class StateManager:
     def __init__(self, on_change: Callable[[AppState], None], olm: OlmClient | None = None,
                  interval: float = 2.0, accounts_path: Path | None = None):
@@ -52,6 +68,9 @@ class StateManager:
         self._orgs_dirty = True
         self._clients_at = float("-inf")  # "never", independent of system uptime
         self._clients_key: Optional[tuple[str, str, str]] = None
+        self._api_clients: list[OrgClient] = []
+        self._api_sites: list = []
+        self._clients_error = ""
         self._thread: Optional[threading.Thread] = None
 
     # -- public API (thread-safe) -------------------------------------------------
@@ -188,36 +207,38 @@ class StateManager:
         self._orgs_for = (active.user_id, active.host)
 
     def _reload_clients(self, status: Optional[OlmStatus]) -> None:
-        """Online clients and sites of the current org, only while connected and at most
-        every 30 s."""
+        """Own tunnel IP every poll; clients and sites of the org at most every 30 s."""
         with self._lock:
             active = copy.deepcopy(self._state.active_account)
         connected = bool(status and status.connected and status.registered)
+        own_ip = netinfo.interface_ipv4() if connected else ""
         org_id = (status.org_id if status else "") or (active.org_id if active else "")
         if not connected or active is None or not org_id or not active.session_token:
             self._clients_key = None
-            with self._lock:
-                self._state.clients, self._state.clients_error, self._state.sites = [], "", []
-            return
-        key = (active.user_id, active.host, org_id)
-        if key == self._clients_key and time.monotonic() - self._clients_at < CLIENTS_INTERVAL:
-            return
-        self._clients_key, self._clients_at = key, time.monotonic()
+            self._api_clients, self._api_sites, self._clients_error = [], [], ""
+        else:
+            key = (active.user_id, active.host, org_id)
+            if key != self._clients_key or time.monotonic() - self._clients_at >= CLIENTS_INTERVAL:
+                self._clients_key, self._clients_at = key, time.monotonic()
+                self._fetch_clients_and_sites(active, org_id)
+        clients = with_self(self._api_clients, own_ip, socket.gethostname()) if connected else []
+        with self._lock:
+            self._state.own_ip = own_ip
+            self._state.clients, self._state.clients_error = clients, self._clients_error
+            self._state.sites = list(self._api_sites)
+
+    def _fetch_clients_and_sites(self, active, org_id: str) -> None:
         try:
-            clients = PangolinApi(active).list_online_clients(org_id)
-            error = ""
+            self._api_clients = PangolinApi(active).list_online_clients(org_id)
+            self._clients_error = ""
         except ApiError as exc:
-            clients, error = [], ("forbidden" if exc.forbidden else str(exc))
+            self._api_clients = []
+            self._clients_error = "forbidden" if exc.forbidden else str(exc)
             log.info("could not list clients: %s", exc)
-        own_ip = netinfo.interface_ipv4()
-        log.debug("online clients: %d (own tunnel ip %s)", len(clients), own_ip or "-")
-        clients = [c for c in clients if c.address != own_ip]
+        log.debug("online clients: %d", len(self._api_clients))
         try:
             # Lets the tray name sites the tunnel does not connect to (no private resource).
-            sites = PangolinApi(active).list_sites(org_id)
+            self._api_sites = PangolinApi(active).list_sites(org_id)
         except ApiError as exc:
-            sites = []
+            self._api_sites = []
             log.info("could not list sites: %s", exc)
-        with self._lock:
-            self._state.clients, self._state.clients_error = clients, error
-            self._state.sites = sites

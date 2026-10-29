@@ -1,6 +1,7 @@
 """Online-clients feature: API parsing, polling, tray signature, clipboard."""
 import json
 import os
+import socket
 import stat
 import urllib.error
 from io import BytesIO
@@ -144,10 +145,11 @@ def manager(tmp_path, monkeypatch):
     return StateManager(seen.append, olm=olm, accounts_path=path), olm, seen, calls, FakeApi
 
 
-def test_clients_polled_when_connected_without_self(manager):
+def test_clients_polled_with_this_device_first(manager):
     mgr, olm, seen, calls, _ = manager
     mgr._poll_once()
-    assert [c.name for c in seen[-1].clients] == ["other"]
+    assert [(c.name, c.is_self) for c in seen[-1].clients] == [("me", True), ("other", False)]
+    assert seen[-1].own_ip == "100.90.128.2"
     mgr._poll_once()
     assert calls == ["org1"]  # throttled to CLIENTS_INTERVAL
     mgr.refresh_now(reload_clients=True)
@@ -167,7 +169,10 @@ def test_clients_forbidden_reported(manager):
     mgr, olm, seen, calls, FakeApi = manager
     FakeApi.error = ApiError("forbidden", forbidden=True)
     mgr._poll_once()
-    assert seen[-1].clients == [] and seen[-1].clients_error == "forbidden"
+    # Without permission the API lists nobody, but this device is still shown (own IP copyable)
+    assert seen[-1].clients_error == "forbidden"
+    assert [(c.name, c.address, c.is_self) for c in seen[-1].clients] == [
+        (socket.gethostname(), "100.90.128.2", True)]
 
 
 def test_sites_loaded_with_clients_and_cleared_when_disconnected(manager):
@@ -183,7 +188,7 @@ def test_sites_error_does_not_hide_clients(manager):
     mgr, olm, seen, calls, FakeApi = manager
     FakeApi.sites_error = ApiError("forbidden", forbidden=True)
     mgr._poll_once()
-    assert seen[-1].sites == [] and [c.name for c in seen[-1].clients] == ["other"]
+    assert seen[-1].sites == [] and [c.name for c in seen[-1].clients] == ["me", "other"]
 
 
 def test_list_sites_skips_local_and_archived(monkeypatch):
@@ -238,3 +243,68 @@ def test_manual_refresh_right_after_boot(manager, monkeypatch):
     clock[0] += 31
     mgr._poll_once()
     assert len(calls) == 3
+
+
+# -- own IP / this device -------------------------------------------------------------
+
+def test_with_self_marks_and_orders():
+    from pangolin_gui.state import with_self
+    api = [OrgClient(2, "other", "100.90.128.3", True), OrgClient(1, "laptop", "100.90.128.2", True)]
+    result = with_self(api, "100.90.128.2", "host")
+    assert [(c.name, c.is_self) for c in result] == [("laptop", True), ("other", False)]
+    assert not api[1].is_self  # input list not mutated
+    synthetic = with_self([], "100.90.128.9", "my-pc")
+    assert [(c.client_id, c.name, c.address, c.is_self) for c in synthetic] == [(0, "my-pc", "100.90.128.9", True)]
+    assert with_self(api, "", "host") == api  # unknown own IP: list unchanged
+
+
+def test_own_ip_cleared_when_disconnected(manager):
+    mgr, olm, seen, calls, _ = manager
+    mgr._poll_once()
+    olm.status = None
+    mgr._poll_once()
+    assert seen[-1].own_ip == "" and seen[-1].clients == []
+
+
+def test_tray_shows_own_ip_and_this_device():
+    from pangolin_gui.tray import build_menu_model
+    from pangolin_gui.menu_model import walk
+
+    acc = Account(user_id="u1", host="https://p.example", email="a@example.com", org_id="o1")
+    me = OrgClient(0, "my-pc", "100.90.128.2", True, is_self=True)
+    state = AppState(conn=ConnState.CONNECTED, accounts=[acc], active_account=acc, own_ip="100.90.128.2",
+                     status=OlmStatus(connected=True, registered=True, org_id="o1"),
+                     clients=[me], clients_error="forbidden")
+    calls = []
+
+    class Ctl:
+        def __getattr__(self, name):
+            return lambda *a: calls.append((name, a))
+
+    nodes = build_menu_model(state, Ctl())
+    by_id = {n.id: n for n in walk(nodes)}
+    top = [n.id for n in nodes]
+    assert top.index("own_ip") == top.index("status") + 1
+    assert by_id["own_ip"].label == "This device: 100.90.128.2"
+    by_id["own_ip"].action()
+    assert calls[-1] == ("copy_client_ip", ("100.90.128.2", "this device"))
+    assert by_id["client:self"].label == "my-pc (this device)  ·  100.90.128.2"
+    by_id["client:self"].action()
+    assert calls[-1] == ("copy_client_ip", ("100.90.128.2", "my-pc"))
+    assert by_id["clients"].label == "Online Clients"          # count excludes this device
+    assert by_id["clients:empty"].label == "Your role may not list clients"
+
+
+def test_no_own_ip_entry_when_disconnected():
+    from pangolin_gui.tray import build_menu_model
+    from pangolin_gui.menu_model import walk
+
+    acc = Account(user_id="u1", host="https://p.example", email="a@example.com")
+    nodes = build_menu_model(AppState(conn=ConnState.DISCONNECTED, accounts=[acc], active_account=acc,
+                                      own_ip="100.90.128.2"), Recorder())
+    assert "own_ip" not in [n.id for n in walk(nodes)]
+
+
+class Recorder:
+    def __getattr__(self, name):
+        return lambda *a: None

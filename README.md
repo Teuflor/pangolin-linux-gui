@@ -26,6 +26,7 @@ Unofficial tray client for [Pangolin](https://pangolin.net) on Linux, modelled o
 - **Log viewer** with search, auto-refresh and highlighting
 - **Online clients:** while connected, the tray menu shows which other devices of the
   organization are online. A click copies their tunnel IP to the clipboard.
+- **Own IP:** shown in the tray and the status window while connected; one click copies it.
 - **Preferences:** language, the CLI's DNS options, log level, autostart, connect automatically
 - **Multilingual:** English and German, more languages via a JSON file
 - **Connect without a password** via an optional systemd service with a polkit rule, or a
@@ -270,12 +271,19 @@ the current organization that are online, each with name and tunnel IP
 - **Clicking an entry** copies the IP to the clipboard and confirms it with a notification.
 - **Refresh** reloads the list right away; otherwise it is fetched every 30 seconds, and only
   while connected.
-- Your own device is hidden based on the IP of the `pangolin` interface.
+- **This device** is listed first, marked `(this device)`, so you can copy your own IP from
+  here too. It is recognized by the IP of the `pangolin` interface; the count in the title
+  only counts the other devices.
+
+**Own IP:** while connected, the tray shows **This device: 100.90.x.y** right below the
+status line, and the status window has an **Own IP** row with a **Copy** button. Both copy
+your tunnel IP to the clipboard. The IP is read locally from the `pangolin` interface, so it
+works without any API permission.
 
 **Permission:** the list comes from the Pangolin API (`/org/{orgId}/clients` and
 `/org/{orgId}/user-devices`). Both require the *listClients* permission, which admins have by
-default in Pangolin. Without it, the menu shows "Your role may not list clients". An admin can
-grant the permission to your role.
+default in Pangolin. Without it, the menu shows "Your role may not list clients" – your own
+device is still listed. An admin can grant the permission to your role.
 
 **Clipboard:** a tray app has no focus when a menu item is clicked. Under Wayland many
 compositors then do not accept the clipboard from GTK. The app therefore uses `wl-copy`
